@@ -1,0 +1,13 @@
+node_modules/
+out/
+release/
+models/
+dist/
+*.log
+*.tsbuildinfo
+.env
+.env.*
+.tmp-*
+Thumbs.db
+.DS_Store
+.vscode/
