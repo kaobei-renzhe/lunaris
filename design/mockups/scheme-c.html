@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>方案 C · 夜航（玻璃拟态）</title>
+<style>
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI','PingFang SC','Microsoft YaHei',system-ui,sans-serif;font-size:12.5px;line-height:1.45;overflow:hidden;-webkit-font-smoothing:antialiased}
+svg{width:13px;height:13px;flex:none}
+.app{display:flex;height:100%}
+.sidebar{width:232px;flex:none;display:flex;flex-direction:column;background:var(--sidebar);border-right:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;padding:14px 14px 10px}
+.logo{width:26px;height:26px}
+.brand-text{display:flex;flex-direction:column;line-height:1.15}
+.brand-text b{font-size:13.5px;letter-spacing:.06em;font-weight:600}
+.brand-text em{font-size:9px;color:var(--faint);font-style:normal;letter-spacing:.08em}
+.icon-btn{margin-left:auto;width:22px;height:22px;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:6px;cursor:pointer;font-size:11px}
+.lib-name{padding:0 15px 10px;font-size:10.5px;color:var(--faint);border-bottom:1px solid var(--line)}
+.nav{flex:1;overflow:hidden;padding:8px 8px}
+.nav-item{display:flex;align-items:center;gap:8px;height:29px;padding:0 8px;border-radius:var(--radius-sm);color:var(--muted);font-size:12px}
+.nav-item b{margin-left:auto;font-size:10px;font-weight:400;color:var(--faint)}
+.nav-item.active{background:var(--accent-soft);color:var(--accent-text)}
+.nav-item.active b{color:var(--accent2)}
+.sec{display:flex;align-items:center;justify-content:space-between;height:26px;padding:0 8px;margin-top:8px;font-size:10px;letter-spacing:.08em;color:var(--faint);text-transform:uppercase}
+.sec i{font-style:normal;font-size:10px}
+.tree .node{display:flex;align-items:center;gap:6px;height:27px;padding:0 7px;border-radius:var(--radius-sm);color:var(--muted);font-size:11.5px}
+.tree .caret{font-size:8px;color:var(--faint);width:8px}
+.tree .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tree .count{margin-left:auto;font-size:10px;color:var(--faint)}
+.tree .lvl1{padding-left:16px}
+.tree .lvl2{padding-left:30px}
+.tree .active{background:var(--accent-soft);color:var(--accent-text)}
+.tag-row{display:flex;flex-wrap:wrap;gap:5px;padding:2px 8px}
+.tag{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:5px;font-size:10.5px;color:var(--muted);background:var(--panel2);border:1px solid var(--line)}
+.tag i{width:6px;height:6px;border-radius:2px}
+.side-bottom{padding:8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--radius-sm);border:1px solid var(--line2);background:var(--panel2);color:var(--text);font-size:11.5px;font-family:inherit;cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--accent-gradient,var(--accent));border-color:transparent;color:var(--on-accent);font-weight:600}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted);height:24px;padding:0 7px}
+.btn.chip{height:26px}
+.btn.select,.pill{height:25px;padding:0 8px;border-radius:var(--radius-sm);border:1px solid var(--line);background:var(--panel2);color:var(--muted);font-size:11px;display:inline-flex;align-items:center;gap:5px}
+.pill.ghost{background:transparent;border-color:transparent}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.hint{font-size:9.5px;color:var(--faint);padding:0 4px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
+.toolbar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--toolbar)}
+.search{display:flex;align-items:center;gap:7px;height:30px;padding:0 11px;width:330px;border-radius:var(--radius-sm);border:1px solid var(--line);background:var(--input);color:var(--faint);font-size:11.5px}
+.spacer{flex:1}
+.count{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.slider{display:flex;align-items:center;gap:7px;padding-left:10px;border-left:1px solid var(--line)}
+.slider span{font-size:10px;color:var(--faint)}
+.slider i{width:76px;height:3px;border-radius:99px;background:var(--line2);position:relative}
+.slider i::after{content:'';position:absolute;left:0;top:0;width:44px;height:3px;border-radius:99px;background:var(--accent)}
+.slider em{width:9px;height:9px;border-radius:50%;background:var(--accent);margin-left:-32px}
+.filters{display:flex;align-items:center;gap:7px;padding:7px 14px;border-bottom:1px solid var(--line);background:var(--toolbar)}
+.dots{display:flex;gap:5px;padding-left:4px}
+.dots i{width:12px;height:12px;border-radius:50%;border:1px solid rgba(255,255,255,.12)}
+.selection{display:flex;align-items:center;gap:9px;margin:8px 14px 0;padding:6px 9px;border:1px solid var(--accent-border);background:var(--accent-soft);border-radius:var(--radius-sm);font-size:11px;color:var(--accent-text)}
+.selected-count{font-weight:600}
+.rate{display:flex;align-items:center;gap:4px;padding-left:9px;border-left:1px solid var(--accent-border);color:var(--muted)}
+.rate b{font-weight:400;font-size:10.5px}
+.mini{height:22px;min-width:22px;padding:0 6px;border:1px solid var(--line2);background:transparent;color:var(--muted);border-radius:5px;font-size:11px;cursor:pointer}
+.mini.ok{color:var(--success)}
+.mini.no{color:var(--danger)}
+.mini.wide{padding:0 10px}
+.gallery{flex:1;min-height:0;padding:12px 14px 16px;column-count:5;column-gap:var(--gap);overflow:hidden}
+.card{margin:0 0 var(--gap);break-inside:avoid;position:relative;border-radius:var(--radius-card);overflow:hidden;background:var(--card);border:1px solid var(--card-border);box-shadow:var(--card-shadow)}
+.card img{display:block;width:100%;height:auto}
+.card.selected{outline:2px solid var(--accent);outline-offset:-2px;box-shadow:var(--selected-shadow)}
+.card figcaption{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 6px;font-size:9.5px;color:rgba(255,255,255,.82);background:linear-gradient(to top,rgba(0,0,0,.55),transparent);opacity:var(--cap-opacity)}
+.flag{position:absolute;top:6px;right:6px;width:16px;height:16px;border-radius:4px;display:grid;place-items:center;font-size:9px;background:rgba(0,0,0,.45);color:#8be9a8}
+.flag.x{color:#ff9aa2}
+.stars{position:absolute;top:6px;left:7px;font-size:9px;color:#f0c05a;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.group{position:absolute;bottom:24px;right:7px;padding:1px 4px;border-radius:3px;background:rgba(0,0,0,.6);color:#cfe0ff;font-size:8.5px}
+.raw{position:absolute;bottom:24px;left:7px;padding:1px 4px;border-radius:3px;background:rgba(0,0,0,.5);color:rgba(255,255,255,.75);font-size:8px;letter-spacing:.08em}
+.detail{width:318px;flex:none;display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line)}
+.detail-head{height:42px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line)}
+.detail-head .title{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detail-body{flex:1;overflow:hidden;padding:12px}
+.preview{border-radius:var(--radius-card);overflow:hidden;background:var(--stage);border:1px solid var(--line);display:grid;place-items:center;max-height:338px}
+.preview img{display:block;width:100%;height:auto;max-height:338px;object-fit:contain}
+.meta{display:flex;align-items:center;justify-content:space-between;margin-top:9px}
+.stars-big{color:#f0c05a;letter-spacing:2px;font-size:13px}
+.dims{font-size:10px;color:var(--faint);font-variant-numeric:tabular-nums}
+.actions{display:flex;gap:5px;margin-top:8px}
+.actions .btn{height:25px;font-size:10.5px;flex:1}
+.actions .btn.on{border-color:var(--success-border);color:var(--success)}
+.sec2{margin:13px 0 6px;font-size:9.5px;letter-spacing:.1em;color:var(--faint);text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chips span{height:21px;display:inline-flex;align-items:center;padding:0 7px;border-radius:5px;font-size:10.5px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.chips .dashed{border-style:dashed;background:transparent}
+.rows div{display:flex;justify-content:space-between;font-size:10.5px;line-height:1.9;color:var(--text)}
+.rows span{color:var(--faint)}
+.rows b{font-weight:400}
+.swatches{display:flex;gap:5px}
+.swatches i{flex:1;height:24px;border-radius:5px;border:1px solid var(--line)}
+.note{height:52px;border-radius:var(--radius-sm);border:1px solid var(--line);background:var(--input);padding:7px 8px;font-size:10.5px;color:var(--faint)}
+.path{font-size:10px;color:var(--muted);word-break:break-all;line-height:1.5}
+.row2{display:flex;gap:5px;margin-top:7px}
+.row2 .btn{flex:1;height:26px;font-size:10.5px}
+
+
+:root{--bg:#05080f;--sidebar:rgba(255,255,255,.035);--panel:rgba(255,255,255,.045);--toolbar:rgba(255,255,255,.03);--panel2:rgba(255,255,255,.06);--input:rgba(255,255,255,.05);--line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);--text:#eaf0ff;--muted:#9aa7c4;--faint:#616f8c;--accent:#5eead4;--accent2:#a78bfa;--accent-soft:rgba(94,234,212,.10);--accent-border:rgba(94,234,212,.28);--accent-text:#c8fff5;--on-accent:#04211d;--stage:rgba(255,255,255,.04);--card:rgba(255,255,255,.04);--card-border:rgba(255,255,255,.07);--card-shadow:0 10px 30px rgba(0,0,0,.25);--selected-shadow:0 0 0 1.5px rgba(94,234,212,.75),0 0 26px rgba(94,234,212,.18);--radius-sm:10px;--radius-card:12px;--gap:12px;--cap-opacity:0}
+body{background:radial-gradient(900px 600px at 18% -10%,rgba(94,234,212,.12),transparent 60%),radial-gradient(900px 600px at 100% 0%,rgba(167,139,250,.14),transparent 55%),#05080f}
+.app{padding:10px;gap:10px}
+.sidebar{border:1px solid var(--line);border-radius:18px;background:var(--sidebar);backdrop-filter:blur(22px);box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden}
+.main{background:radial-gradient(900px 520px at 32% -12%,rgba(94,234,212,.11),transparent 62%),radial-gradient(720px 440px at 86% -8%,rgba(167,139,250,.13),transparent 58%)}
+.toolbar{margin:0 0 0 0;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.03);backdrop-filter:blur(18px);padding:8px 10px}
+.filters{border:0;background:transparent;padding:9px 4px 7px}
+.search{background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.08);border-radius:10px}
+.btn{border-radius:9px;background:rgba(255,255,255,.05)}
+.btn.primary{background:linear-gradient(135deg,#5eead4,#7dd3fc);color:#04211d}
+.pill{border-radius:99px;background:rgba(255,255,255,.04)}
+.selection{border-radius:12px;background:rgba(94,234,212,.08);border-color:rgba(94,234,212,.25)}
+.gallery{column-gap:12px;padding:12px 2px 0}
+.card{box-shadow:0 10px 26px rgba(0,0,0,.28)}
+.detail{border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.045);backdrop-filter:blur(22px);box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden}
+.detail-head{border-bottom:1px solid var(--line)}
+.preview{border-radius:12px;border-color:rgba(255,255,255,.08)}
+.note{background:rgba(255,255,255,.04)}
+.chips span{border-radius:8px;background:rgba(255,255,255,.05)}
+.mini{border-radius:7px;background:rgba(255,255,255,.04)}
+.dots i{border-color:rgba(255,255,255,.18)}
+
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 32 32"><defs><linearGradient id="moon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--accent)"/><stop offset="1" stop-color="var(--accent2)"/></linearGradient></defs><path d="M21 5a11 11 0 1 0 6 12A9 9 0 0 1 21 5Z" fill="url(#moon)"/><circle cx="24" cy="22" r="1.6" fill="var(--accent)"/></svg></div>
+      <div class="brand-text"><b>月巢</b><em>MoonNest 0.1.11</em></div>
+      <button class="icon-btn">⇄</button>
+    </div>
+    <div class="lib-name">照片</div>
+    <nav class="nav">
+      <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="m21 15-4.5-4.5L7 20"/></svg><span>全部图片</span><b>11511</b></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4 2.5 20h19Z"/><path d="M12 10v4m0 3v.5"/></svg><span>文件丢失</span><b>2</b></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4 2.5 20h19Z"/><path d="M12 10v4m0 3v.5"/></svg><span>导入异常</span><b>1</b></div>
+      <div class="sec"><span>源目录</span><i>▾</i></div>
+      
+  <div class="tree">
+    <div class="node root"><span class="caret">▾</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span class="name">照片</span><span class="count">11511</span></div>
+    <div class="node lvl1"><span class="caret">▾</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span class="name">泰罗摄影课-作业</span><span class="count">824</span></div>
+    <div class="node lvl2 active"><span class="caret">▸</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span class="name">海边人像</span><span class="count">70</span></div>
+    <div class="node lvl2"><span class="caret">▸</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span class="name">室内棚拍</span><span class="count">212</span></div>
+    <div class="node lvl1"><span class="caret">▸</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span class="name">风光 · 川西</span><span class="count">1408</span></div>
+    <div class="node lvl1"><span class="caret">▸</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span class="name">街拍</span><span class="count">962</span></div>
+  </div>
+      <div class="sec"><span>文件夹</span><i>＋</i></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span>旅拍精选</span><b>142</b></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg><span>待修片</span><b>36</b></div>
+      <div class="sec"><span>标签</span><i>10</i></div>
+      <div class="tag-row">
+        <span class="tag"><i style="background:#e8b45a"></i>人像</span>
+        <span class="tag"><i style="background:#6fcf97"></i>风景</span>
+        <span class="tag"><i style="background:#7aa2f7"></i>夜景</span>
+        <span class="tag"><i style="background:#eb5757"></i>街拍</span>
+      </div>
+      <div class="sec"><span>维护</span><i>▸</i></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg><span>刷新图库</span></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/></svg><span>语义索引</span><b>3201/11511</b></div>
+    </nav>
+    <div class="side-bottom">
+      <button class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> 导入图片</button>
+      <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg> 刷新图库</button>
+      <div class="row">
+        <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg> 文件夹</button>
+        <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg> 扫描</button>
+      </div>
+      <div class="hint">10 个标签 · 3 个文件夹</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>搜索文件名、标签、备注…</span></label>
+      <button class="btn chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z"/></svg> 语义</button>
+      <button class="btn select">最新导入 <i>▾</i></button>
+      <div class="spacer"></div>
+      <span class="count">70 张</span>
+      <div class="slider"><span>缩略图</span><i></i><em></em></div>
+    </div>
+    <div class="filters">
+      <button class="pill">全部评分 <i>▾</i></button>
+      <button class="pill">全部构图 <i>▾</i></button>
+      <button class="pill">全部旗标 <i>▾</i></button>
+      <button class="pill">展开连拍</button>
+      <div class="dots">
+        <i style="background:#1a1c21"></i><i style="background:#8b93a3"></i><i style="background:#e8ecf3"></i>
+        <i style="background:#e5534b"></i><i style="background:#e8873a"></i><i style="background:#dfc04a"></i>
+        <i style="background:#57a773"></i><i style="background:#4bb8c9"></i><i style="background:#4f7fd4"></i>
+      </div>
+      <button class="pill ghost">清除筛选</button>
+      <div class="spacer"></div>
+      <button class="pill ghost">保存筛选</button>
+    </div>
+    <div class="selection">
+      <span class="selected-count">已选 1 张</span>
+      <span class="rate">★ <b>1</b> <b>2</b> <b>3</b> <b>4</b> <b>5</b></span>
+      <button class="mini ok">✓</button>
+      <button class="mini no">✕</button>
+      <button class="mini">–</button>
+      <div class="spacer"></div>
+      <button class="mini wide">移除</button>
+      <button class="mini">×</button>
+    </div>
+    <div class="gallery">
+      <figure class="card selected">
+      <img src="images/01.webp" alt="" />
+      <span class="flag">✓</span><span class="stars">★★★★★</span>
+      <figcaption>_DSC4821.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/02.webp" alt="" />
+      <span class="stars">★★★</span>
+      <figcaption>IMG_2043.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/03.webp" alt="" />
+      <span class="raw">RAW</span>
+      <figcaption>DSCF1024.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/04.webp" alt="" />
+      <span class="flag x">✕</span>
+      <figcaption>P1002391.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/05.webp" alt="" />
+      
+      <figcaption>DSC09012.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/06.webp" alt="" />
+      
+      <figcaption>IMG_8812.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/07.webp" alt="" />
+      <span class="group">×3 展开</span>
+      <figcaption>_DSC5108.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/08.webp" alt="" />
+      
+      <figcaption>P1020884.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/09.webp" alt="" />
+      <span class="raw">RAW</span>
+      <figcaption>DSCF2277.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/10.webp" alt="" />
+      
+      <figcaption>IMG_3391.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/11.webp" alt="" />
+      
+      <figcaption>DSC09931.jpg</figcaption>
+    </figure>
+<figure class="card">
+      <img src="images/12.webp" alt="" />
+      
+      <figcaption>IMG_5520.jpg</figcaption>
+    </figure>
+    </div>
+  </main>
+
+  <aside class="detail">
+    <div class="detail-head">
+      <span class="title">海和蓝影人像摄影无限TX · 原创作品</span>
+      <button class="icon-btn">×</button>
+    </div>
+    <div class="detail-body scroll">
+      <div class="preview"><img src="images/01.webp" alt="" /></div>
+      <div class="meta">
+        <div class="stars-big">★★★☆☆</div>
+        <span class="dims">4032 × 6048</span>
+      </div>
+      <div class="actions">
+        <button class="btn on">✓ 留用</button>
+        <button class="btn">✕ 淘汰</button>
+        <button class="btn ghost">找相似</button>
+      </div>
+      <div class="sec2">标签</div>
+      <div class="chips"><span>人像</span><span>海边</span><span>蓝色</span></div>
+      <div class="sec2">文件夹</div>
+      <div class="chips"><span>旅拍精选</span><span class="dashed">＋ 加入</span></div>
+      <div class="sec2">文件信息</div>
+      <div class="rows">
+        <div><span>格式</span><b>JPG</b></div>
+        <div><span>大小</span><b>405 KB</b></div>
+        <div><span>拍摄</span><b>2021-08-04 15:15</b></div>
+        <div><span>导入</span><b>2026-10-24 20:44</b></div>
+      </div>
+      <div class="sec2">主色</div>
+      <div class="swatches">
+        <i style="background:#1c2a3a"></i><i style="background:#2f4257"></i><i style="background:#5f7890"></i>
+        <i style="background:#9fb3c4"></i><i style="background:#d7dee4"></i>
+      </div>
+      <div class="sec2">备注</div>
+      <div class="note">写点备注…</div>
+      <div class="sec2">位置</div>
+      <div class="path">E:\照片\泰罗摄影课-作业\海边人像\_DSC4821.jpg</div>
+      <div class="row2">
+        <button class="btn">复制图片</button>
+        <button class="btn">资源管理器</button>
+      </div>
+    </div>
+  </aside>
+</div></body>
+</html>

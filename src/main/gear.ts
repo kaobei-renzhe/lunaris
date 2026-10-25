@@ -10,6 +10,7 @@ import type {
   GearPlan,
   GearRecommendation,
   GearSpec,
+  GearSuggestion,
   GearUsage,
   ScenarioId,
   ScenarioOption,
@@ -565,6 +566,179 @@ export function gearUsage(): GearUsage {
 
 export function gearCatalog(): GearSpec[] {
   return GEAR_CATALOG
+}
+
+const BRAND_ALIASES: Array<{ key: string; label: string }> = [
+  { key: 'nikon', label: 'Nikon' },
+  { key: 'canon', label: 'Canon' },
+  { key: 'sony', label: 'Sony' },
+  { key: 'fujifilm', label: 'Fujifilm' },
+  { key: 'panasonic', label: 'Panasonic' },
+  { key: 'olympus', label: 'Olympus' },
+  { key: 'om digital', label: 'OM System' },
+  { key: 'leica', label: 'Leica' },
+  { key: 'hasselblad', label: 'Hasselblad' },
+  { key: 'dji', label: 'DJI' },
+  { key: 'gopro', label: 'GoPro' },
+  { key: 'apple', label: 'Apple' },
+  { key: 'oppo', label: 'OPPO' },
+  { key: 'vivo', label: 'vivo' },
+  { key: 'xiaomi', label: 'Xiaomi' },
+  { key: 'huawei', label: 'Huawei' },
+  { key: 'samsung', label: 'Samsung' },
+  { key: 'ricoh', label: 'Ricoh' },
+  { key: 'pentax', label: 'Pentax' },
+  { key: 'sigma', label: 'Sigma' },
+  { key: 'tamron', label: 'Tamron' },
+  { key: 'tokina', label: 'Tokina' },
+  { key: 'viltrox', label: 'Viltrox' },
+  { key: 'samyang', label: 'Samyang' },
+  { key: 'laowa', label: 'Laowa' }
+]
+
+const LENS_BRAND_PREFIX: Array<{ prefix: string; brand: string }> = [
+  { prefix: 'nikkor', brand: 'Nikon' },
+  { prefix: 'nikon', brand: 'Nikon' },
+  { prefix: 'fe ', brand: 'Sony' },
+  { prefix: 'e ', brand: 'Sony' },
+  { prefix: 'rf ', brand: 'Canon' },
+  { prefix: 'ef ', brand: 'Canon' },
+  { prefix: 'xf ', brand: 'Fujifilm' },
+  { prefix: 'xc ', brand: 'Fujifilm' },
+  { prefix: 'sigma', brand: 'Sigma' },
+  { prefix: 'tamron', brand: 'Tamron' },
+  { prefix: 'viltrox', brand: 'Viltrox' },
+  { prefix: 'samyang', brand: 'Samyang' },
+  { prefix: 'laowa', brand: 'Laowa' }
+]
+
+const CAMERA_NOISE =
+  /\b(corporation|corp\.?|inc\.?|co\.,?\s*ltd\.?|ltd\.?|digital camera|digital|imaging)\b/gi
+
+/** EXIF 的机身字段通常是「NIKON CORPORATION NIKON Z f」这种，拆成品牌 + 型号 */
+function splitCamera(raw: string): { brand: string; model: string } {
+  const lower = raw.toLowerCase()
+  const brand = BRAND_ALIASES.find((entry) => lower.startsWith(entry.key))?.label ?? ''
+  let model = raw.replace(/\s+/g, ' ').replace(CAMERA_NOISE, ' ').replace(/\s+/g, ' ').trim()
+  while (brand && model.toLowerCase().startsWith(brand.toLowerCase())) {
+    model = model.slice(brand.length).trim()
+  }
+  return { brand, model }
+}
+
+function splitLens(raw: string): { brand: string; model: string } {
+  const text = raw.replace(/\s+/g, ' ').trim()
+  const lower = text.toLowerCase()
+  const brand = LENS_BRAND_PREFIX.find((entry) => lower.startsWith(entry.prefix))?.brand ?? ''
+  return { brand, model: text }
+}
+
+interface ExifGroup {
+  camera: string | null
+  lens: string | null
+  c: number
+}
+
+function loadExifGroups(): ExifGroup[] {
+  try {
+    return getDb()
+      .prepare(
+        `SELECT json_extract(exif, '$.camera') AS camera,
+                json_extract(exif, '$.lens') AS lens,
+                COUNT(*) AS c
+         FROM items
+         WHERE trashed = 0 AND missing = 0 AND exif IS NOT NULL
+         GROUP BY camera, lens`
+      )
+      .all() as ExifGroup[]
+  } catch {
+    // 老库没有 JSON1 时退化为逐条解析，限制条数避免卡顿
+    try {
+      const rows = getDb()
+        .prepare(
+          'SELECT exif FROM items WHERE trashed = 0 AND missing = 0 AND exif IS NOT NULL LIMIT 20000'
+        )
+        .all() as Array<{ exif: string }>
+      const out: ExifGroup[] = []
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(row.exif) as { camera?: string; lens?: string }
+          out.push({ camera: parsed.camera ?? null, lens: parsed.lens ?? null, c: 1 })
+        } catch {
+          /* 单条坏了跳过 */
+        }
+      }
+      return out
+    } catch {
+      return []
+    }
+  }
+}
+
+/**
+ * 可搜索的器材候选：内置目录 + 照片 EXIF 里实际出现过的机身/镜头。
+ * 命中目录的会自动带上完整参数，没命中的只给品牌型号，参数留空。
+ */
+export function gearSuggestions(): GearSuggestion[] {
+  const merged = new Map<string, GearSuggestion>()
+  const catalogued: GearSuggestion[] = []
+  for (const spec of GEAR_CATALOG) {
+    const item: GearSuggestion = { ...spec, count: 0, catalogued: true }
+    merged.set(`${spec.category}|${normalizeText(spec.model)}`, item)
+    catalogued.push(item)
+  }
+
+  const findCatalog = (category: GearCategory, model: string): GearSuggestion | null => {
+    const target = normalizeText(model)
+    if (!target) return null
+    for (const entry of catalogued) {
+      if (entry.category !== category) continue
+      const key = normalizeText(entry.model)
+      if (!key) continue
+      if (key === target) return entry
+      if (key.length >= 6 && target.includes(key)) return entry
+      if (target.length >= 6 && key.includes(target)) return entry
+    }
+    return null
+  }
+
+  const bump = (category: GearCategory, brand: string, model: string, count: number): void => {
+    const clean = model.replace(/\s+/g, ' ').trim()
+    if (!clean || clean.length < 2) return
+    const hit = findCatalog(category, clean)
+    if (hit) {
+      hit.count += count
+      return
+    }
+    const key = `${category}|${normalizeText(clean)}`
+    const existing = merged.get(key)
+    if (existing) {
+      existing.count += count
+      if (!existing.brand && brand) existing.brand = brand
+      return
+    }
+    merged.set(key, { category, brand, model: clean, count, catalogued: false })
+  }
+
+  for (const group of loadExifGroups()) {
+    if (group.camera) {
+      const parsed = splitCamera(group.camera)
+      bump('body', parsed.brand, parsed.model, group.c)
+    }
+    if (group.lens) {
+      const parsed = splitLens(group.lens)
+      bump('lens', parsed.brand, parsed.model, group.c)
+    }
+  }
+
+  return [...merged.values()]
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        Number(b.catalogued) - Number(a.catalogued) ||
+        a.model.localeCompare(b.model, 'zh-CN')
+    )
+    .slice(0, 80)
 }
 
 export function gearScenarios(): ScenarioOption[] {

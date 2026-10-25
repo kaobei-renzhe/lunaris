@@ -3,6 +3,7 @@ import { getDb } from './db'
 import { filteredIds, getItem, getItemFile, getItemsByIds } from './repo'
 import { dot, embedImage, embedText, MODEL_TAG, resolveModelDir } from './clip/embedder'
 import { beginIndexing, endIndexing, isTagging } from './taskLock'
+import { log } from './logger'
 import type { FilterState, Item } from '../shared/types'
 
 export interface ClipStatus {
@@ -55,10 +56,18 @@ export function cancelClipIndex(): void {
   cancelRequested = true
 }
 
+export interface IndexOptions {
+  /** 只处理前 N 张（闲时小批量用，不传表示全部） */
+  limit?: number
+  /** 每张之前检查一次，返回 false 就提前收工（用户回来 / 开始导入） */
+  shouldContinue?: () => boolean
+}
+
 export async function indexEmbeddings(
-  onProgress: (progress: ClipProgress) => void
-): Promise<{ indexed: number; failed: number; cancelled: boolean }> {
-  if (running) return { indexed: 0, failed: 0, cancelled: true }
+  onProgress: (progress: ClipProgress) => void,
+  options: IndexOptions = {}
+): Promise<{ indexed: number; failed: number; cancelled: boolean; stopped: boolean }> {
+  if (running) return { indexed: 0, failed: 0, cancelled: true, stopped: false }
   if (isTagging()) throw new Error('正在做自动分类，等它完成再建索引')
   if (!resolveModelDir()) throw new Error('语义模型还没下载')
 
@@ -73,9 +82,13 @@ export async function indexEmbeddings(
         `SELECT i.id, i.name FROM items i
          WHERE i.trashed = 0 AND i.missing = 0
            AND NOT EXISTS (SELECT 1 FROM embeddings e WHERE e.item_id = i.id AND e.model = ?)
-         ORDER BY i.id`
+         ORDER BY i.id
+         LIMIT ?`
       )
-      .all(MODEL_TAG) as Array<{ id: number; name: string }>
+      .all(MODEL_TAG, options.limit && options.limit > 0 ? Math.floor(options.limit) : -1) as Array<{
+      id: number
+      name: string
+    }>
 
     const total = rows.length
     const insert = db.prepare(
@@ -84,10 +97,16 @@ export async function indexEmbeddings(
     let indexed = 0
     let failed = 0
     let done = 0
+    let stopped = false
+    const failureSamples: string[] = []
     onProgress({ done, total, current: '' })
 
     for (const row of rows) {
       if (cancelRequested) break
+      if (options.shouldContinue && !options.shouldContinue()) {
+        stopped = true
+        break
+      }
       const file = getItemFile(row.id)
       try {
         if (!file || !existsSync(file)) throw new Error('文件不可用')
@@ -99,14 +118,19 @@ export async function indexEmbeddings(
           Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength)
         )
         indexed++
-      } catch {
+      } catch (error) {
         failed++
+        // 只留前几条原因，够定位就行，避免日志被上万条刷爆
+        if (failureSamples.length < 3) failureSamples.push((error as Error).message || '未知错误')
       }
       done++
       onProgress({ done, total, current: row.name })
     }
 
-    return { indexed, failed, cancelled: cancelRequested }
+    if (failed > 0) {
+      void log.warn('clip', '语义索引部分失败', { indexed, failed, total, samples: failureSamples })
+    }
+    return { indexed, failed, cancelled: cancelRequested, stopped }
   } finally {
     running = false
     cache = null

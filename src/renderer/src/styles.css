@@ -70,6 +70,242 @@
   --input-focus-bg: #ffffff;
 }
 
+/* ============ 可选界面风格（设置 → 界面风格） ============ */
+
+/* 月蚀：夜色紫黑 + 月光紫 */
+:root[data-skin='eclipse'] {
+  color-scheme: dark;
+  --bg: #09070f;
+  --panel: #0d0a15;
+  --panel-2: #13101d;
+  --panel-3: #1a1626;
+  --border: #201b2d;
+  --border-strong: #2b243d;
+  --text: #eceaf5;
+  --muted: #958fae;
+  --faint: #655e7d;
+  --accent: #a78bfa;
+  --accent-2: #c4b5fd;
+  --accent-soft: #191333;
+  --accent-border: #342a5c;
+  --accent-text: #ddd0ff;
+  --on-accent: #120a24;
+  --danger: #f07178;
+  --danger-text: #ff9aa2;
+  --danger-soft: #2a1618;
+  --danger-border: #5a2b2f;
+  --success: #8be9a8;
+  --success-soft: #17241a;
+  --success-border: #3c7a54;
+  --warn: #e8c07a;
+  --warn-soft: #1f1a10;
+  --warn-border: #4a3c22;
+  --star: #e8b45a;
+  --stage: #0a0812;
+  --scroll-thumb: #2a2438;
+  --scroll-thumb-hover: #3a314d;
+  --input-focus-border: #443a63;
+  --input-focus-bg: #0e0b18;
+}
+:root[data-skin='eclipse'] .card-thumb {
+  border-radius: 6px;
+}
+:root[data-skin='eclipse'] .btn,
+:root[data-skin='eclipse'] .input {
+  border-radius: 6px;
+}
+
+/* 夜航：半透明玻璃 + 青绿/紫光晕 */
+:root[data-skin='aurora'] {
+  color-scheme: dark;
+  --bg: #05080f;
+  /* 面板底色保持不透明，否则弹窗叠在遮罩上会透成一片 */
+  --panel: #0a1018;
+  --panel-2: rgba(255, 255, 255, 0.072);
+  --panel-3: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #eaf0ff;
+  --muted: #9aa7c4;
+  --faint: #64728f;
+  --accent: #5eead4;
+  --accent-2: #7dd3fc;
+  --accent-soft: rgba(94, 234, 212, 0.12);
+  --accent-border: rgba(94, 234, 212, 0.32);
+  --accent-text: #c8fff5;
+  --on-accent: #04211d;
+  --danger: #f87171;
+  --danger-text: #fda4af;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --danger-border: rgba(248, 113, 113, 0.35);
+  --success: #5eead4;
+  --success-soft: rgba(94, 234, 212, 0.1);
+  --success-border: rgba(94, 234, 212, 0.35);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.1);
+  --warn-border: rgba(251, 191, 36, 0.3);
+  --star: #fbbf24;
+  --stage: rgba(255, 255, 255, 0.04);
+  --scroll-thumb: rgba(255, 255, 255, 0.16);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.26);
+  --input-focus-border: rgba(94, 234, 212, 0.45);
+  --input-focus-bg: rgba(255, 255, 255, 0.07);
+}
+:root[data-skin='aurora'] body {
+  background: radial-gradient(900px 600px at 15% -10%, rgba(94, 234, 212, 0.13), transparent 60%),
+    radial-gradient(900px 620px at 100% 0%, rgba(167, 139, 250, 0.15), transparent 58%), #05080f;
+}
+:root[data-skin='aurora'] aside {
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(20px);
+}
+:root[data-skin='aurora'] .card-thumb {
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+:root[data-skin='aurora'] .card-thumb.selected {
+  box-shadow: 0 0 0 1.5px rgba(94, 234, 212, 0.8), 0 0 24px rgba(94, 234, 212, 0.18);
+}
+:root[data-skin='aurora'] .btn,
+:root[data-skin='aurora'] .input,
+:root[data-skin='aurora'] .side-item {
+  border-radius: 9px;
+}
+
+/* 墨岩：中性深灰、低饱和 */
+:root[data-skin='graphite'] {
+  color-scheme: dark;
+  --bg: #0f1113;
+  --panel: #141619;
+  --panel-2: #191c20;
+  --panel-3: #1f2328;
+  --border: #23272d;
+  --border-strong: #2e343c;
+  --text: #e6e9ee;
+  --muted: #8d949f;
+  --faint: #5d6570;
+  --accent: #9aa7b8;
+  --accent-2: #c3ccda;
+  --accent-soft: #1d2228;
+  --accent-border: #333b46;
+  --accent-text: #d7dfea;
+  --on-accent: #14171b;
+  --danger: #e06c75;
+  --danger-text: #f1949a;
+  --danger-soft: #271719;
+  --danger-border: #4f2a2e;
+  --success: #8fbf9f;
+  --success-soft: #18231b;
+  --success-border: #365440;
+  --warn: #d7b36a;
+  --warn-soft: #211d14;
+  --warn-border: #4a3f27;
+  --star: #d9b26a;
+  --stage: #0c0e10;
+  --scroll-thumb: #2a3038;
+  --scroll-thumb-hover: #39424d;
+  --input-focus-border: #46505d;
+  --input-focus-bg: #14171b;
+}
+:root[data-skin='graphite'] .card-thumb {
+  border-radius: 4px;
+}
+:root[data-skin='graphite'] .btn,
+:root[data-skin='graphite'] .input {
+  border-radius: 6px;
+}
+
+/* 柔光：暖白纸感 + 陶土棕 */
+:root[data-skin='paper'] {
+  color-scheme: light;
+  --bg: #f6f4f0;
+  --panel: #fbfaf8;
+  --panel-2: #f1ede6;
+  --panel-3: #e9e3d9;
+  --border: #e6e0d6;
+  --border-strong: #d8d0c2;
+  --text: #26231f;
+  --muted: #6f6a61;
+  --faint: #a39c90;
+  --accent: #b4764a;
+  --accent-2: #9a5f39;
+  --accent-soft: #f2e7dc;
+  --accent-border: #e3cdb8;
+  --accent-text: #7d4d2e;
+  --on-accent: #ffffff;
+  --danger: #c2413a;
+  --danger-text: #a8322c;
+  --danger-soft: #fbeceb;
+  --danger-border: #eec6c2;
+  --success: #3f7a52;
+  --success-soft: #e9f3ec;
+  --success-border: #c3ddcb;
+  --warn: #96631a;
+  --warn-soft: #fdf3e0;
+  --warn-border: #e7d3ac;
+  --star: #d99a2b;
+  --stage: #eee9e1;
+  --scroll-thumb: #d6cdc0;
+  --scroll-thumb-hover: #c4b8a8;
+  --input-focus-border: #c9a17c;
+  --input-focus-bg: #fffdf9;
+}
+:root[data-skin='paper'] .card-thumb {
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(60, 45, 30, 0.07);
+}
+:root[data-skin='paper'] .card-thumb.selected {
+  box-shadow: 0 0 0 2px var(--accent), 0 10px 26px rgba(60, 45, 30, 0.12);
+}
+:root[data-skin='paper'] .btn,
+:root[data-skin='paper'] .input {
+  border-radius: 8px;
+}
+
+/* 雾蓝：冷调浅色、清透 */
+:root[data-skin='mist'] {
+  color-scheme: light;
+  --bg: #f2f6fb;
+  --panel: #ffffff;
+  --panel-2: #eef3f9;
+  --panel-3: #e4ebf4;
+  --border: #dce5ef;
+  --border-strong: #c8d5e4;
+  --text: #1c2633;
+  --muted: #5f7085;
+  --faint: #93a3b6;
+  --accent: #4f7fd4;
+  --accent-2: #3d6cc0;
+  --accent-soft: #e8effb;
+  --accent-border: #c2d4ef;
+  --accent-text: #244a86;
+  --on-accent: #ffffff;
+  --danger: #cf3f4b;
+  --danger-text: #b8323f;
+  --danger-soft: #fdecee;
+  --danger-border: #edc3c7;
+  --success: #2f7d4f;
+  --success-soft: #e6f4ea;
+  --success-border: #b9ddc6;
+  --warn: #96631a;
+  --warn-soft: #fdf3e0;
+  --warn-border: #e7d3ac;
+  --star: #d99a2b;
+  --stage: #e9eff7;
+  --scroll-thumb: #c4d1e0;
+  --scroll-thumb-hover: #aabcd2;
+  --input-focus-border: #8fb1e0;
+  --input-focus-bg: #ffffff;
+}
+:root[data-skin='mist'] .card-thumb {
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(30, 60, 100, 0.06);
+}
+:root[data-skin='mist'] .btn,
+:root[data-skin='mist'] .input {
+  border-radius: 8px;
+}
+
 * {
   box-sizing: border-box;
 }

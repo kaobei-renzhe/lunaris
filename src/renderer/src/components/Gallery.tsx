@@ -1,9 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react'
-import { ImagePlus, Sparkles } from 'lucide-react'
+import { ImagePlus, Sparkles, TriangleAlert } from 'lucide-react'
 import type { Item } from '@shared/types'
 import { RAW_EXT } from '@shared/formats'
-import { thumbUrl } from '../lib/format'
+import { scoreColor, thumbUrl } from '../lib/format'
 
 const GAP = 12
 const PAD = 14
@@ -17,6 +17,8 @@ interface GalleryProps {
   loadingMore: boolean
   hasMore: boolean
   focusId: number | null
+  /** 递增时强制把焦点项重新滚进视野（比如从大图退出后） */
+  focusTick: number
   expandedGroups: string[]
   hasFilter: boolean
   resetKey: string
@@ -64,14 +66,24 @@ const Card = memo(function Card({
       onClick={(e) => onSelect(item.id, e)}
       onDoubleClick={() => onOpen(item.id)}
     >
-      <img
-        src={thumbUrl(item.id, small)}
-        alt={item.name}
-        loading="lazy"
-        decoding="async"
-        draggable={false}
-        style={item.missing ? { opacity: 0.5, filter: 'grayscale(0.6)' } : undefined}
-      />
+      {item.error ? (
+        <div className="absolute inset-0 grid place-items-center bg-[var(--panel-2)] px-2 text-center">
+          <div>
+            <TriangleAlert size={18} className="mx-auto text-[var(--danger-text)]" />
+            <div className="mt-1 text-[10px] text-[var(--danger-text)]">无法读取</div>
+            <div className="mt-0.5 text-[9.5px] text-[var(--faint)] truncate">{item.ext.replace('.', '').toUpperCase()}</div>
+          </div>
+        </div>
+      ) : (
+        <img
+          src={thumbUrl(item.id, small)}
+          alt={item.name}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          style={item.missing ? { opacity: 0.5, filter: 'grayscale(0.6)' } : undefined}
+        />
+      )}
       <div
         className="absolute inset-x-0 bottom-0 h-[42%] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
         style={{ background: 'linear-gradient(to top, rgba(5,7,10,0.72), rgba(5,7,10,0))' }}
@@ -79,6 +91,15 @@ const Card = memo(function Card({
       <div className="absolute bottom-1.5 left-2 right-2 text-[11px] text-white/90 truncate opacity-0 group-hover:opacity-100 pointer-events-none">
         {item.name}
       </div>
+      {item.quality && (
+        <span
+          className="absolute top-1.5 left-2 px-1 rounded text-[10.5px] font-semibold tabular-nums"
+          style={{ color: scoreColor(item.quality.overall), background: 'rgba(0,0,0,0.5)' }}
+          title={`AI 评分 ${item.quality.overall}${item.quality.comment ? `：${item.quality.comment}` : ''}`}
+        >
+          {item.quality.overall}
+        </span>
+      )}
       {item.flag !== 0 && (
         <span
           className="absolute top-1.5 right-2 text-[11px] font-semibold px-1 rounded"
@@ -152,6 +173,7 @@ export default function Gallery({
   loadingMore,
   hasMore,
   focusId,
+  focusTick,
   expandedGroups,
   hasFilter,
   resetKey,
@@ -241,7 +263,7 @@ export default function Gallery({
     return () => observer.disconnect()
   }, [hasMore, loadingMore, onLoadMore, items.length])
 
-  // 键盘 J/K 切换时把当前项滚进视野
+  // 键盘 J/K 切换时把当前项滚进视野；从大图退出时靠 focusTick 强制重新定位
   useEffect(() => {
     if (!focusId) return
     const index = items.findIndex((i) => i.id === focusId)
@@ -253,7 +275,7 @@ export default function Gallery({
     if (top < el.scrollTop + 40 || bottom > el.scrollTop + el.clientHeight - 40) {
       el.scrollTo({ top: Math.max(0, top - el.clientHeight / 2 + box.h / 2), behavior: 'smooth' })
     }
-  }, [focusId, items, boxes])
+  }, [focusId, focusTick, items, boxes])
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
 

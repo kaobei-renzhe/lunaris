@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, relative, sep } from 'node:path'
-import { getDb, getLibraryPath } from './db'
+import { getDb, getIndexPath, getLibraryPath } from './db'
 import { exportRows, stats } from './repo'
 import { ZipWriter, listZipEntries, readZipEntry } from './zip'
 
@@ -18,7 +18,9 @@ export async function createBackup(
   includeCache: boolean
 ): Promise<{ path: string; size: number }> {
   const library = getLibraryPath()
-  const tempDb = join(library, 'backup-temp.db')
+  // 索引可能被搬到图库目录之外，临时快照要跟着索引目录走
+  const indexDir = getIndexPath() || library
+  const tempDb = join(indexDir, 'backup-temp.db')
 
   // 用 SQLite 自己的备份接口拿一致性快照，避免 WAL 里还有没落盘的数据
   await getDb().backup(tempDb)
@@ -47,8 +49,8 @@ export async function createBackup(
 
     if (includeCache) {
       for (const folder of ['thumbnails', 'previews']) {
-        walkFiles(join(library, folder), (full) => {
-          const name = relative(library, full).split(sep).join('/')
+        walkFiles(join(indexDir, folder), (full) => {
+          const name = relative(indexDir, full).split(sep).join('/')
           writer.addFile(name, readFileSync(full), true)
         })
       }

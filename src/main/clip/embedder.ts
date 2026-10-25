@@ -49,7 +49,12 @@ async function ensureLoaded(): Promise<Loaded> {
     loaded = (async () => {
       const dir = resolveModelDir()
       if (!dir) throw new Error('语义模型还没下载')
-      const session = await ort.InferenceSession.create(join(dir, MODEL_FILE))
+      // 限制线程数：语义索引是后台功能，别把整机 CPU 吃满
+      const session = await ort.InferenceSession.create(join(dir, MODEL_FILE), {
+        intraOpNumThreads: 2,
+        interOpNumThreads: 1,
+        executionMode: 'sequential'
+      })
       const tokenizer = new BertTokenizer(join(dir, VOCAB_FILE))
       return { session, tokenizer, dir }
     })().catch((error) => {

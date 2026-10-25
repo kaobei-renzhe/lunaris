@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import type {
   ClipDownloadProgress,
   ClipProgress,
   ClipStatus,
   FilterState,
   Folder,
+  ImportDirNode,
+  ImportOptions,
   ImportProgress,
+  ImportResult,
   Item,
+  PendingImport,
   SmartFolder,
   Stats,
   Tag,
@@ -23,12 +28,18 @@ import AutoBackupDialog from './components/AutoBackupDialog'
 import AutoTagDialog from './components/AutoTagDialog'
 import RelocateDialog from './components/RelocateDialog'
 import EquipmentDialog from './components/EquipmentDialog'
-import SettingsDialog from './components/SettingsDialog'
+import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
+import AdviceDialog from './components/AdviceDialog'
+import SmartFilterDialog from './components/SmartFilterDialog'
+import ImportDialog from './components/ImportDialog'
+import ImportStatusCard from './components/ImportStatusCard'
+import ResumeImportCard from './components/ResumeImportCard'
 import Welcome from './components/Welcome'
-import { formatBytes } from './lib/format'
-import { applyTheme, cacheTheme, watchSystemTheme } from './lib/theme'
+import { formatBytes, folderName } from './lib/format'
+import { applySkin, applyTheme, cacheSkin, cacheTheme, watchSystemTheme } from './lib/theme'
+import type { SkinId } from '@shared/skins'
 
-const EMPTY_STATS: Stats = { total: 0, missing: 0, tags: 0, folders: 0, bytes: 0 }
+const EMPTY_STATS: Stats = { total: 0, missing: 0, tags: 0, folders: 0, bytes: 0, errors: 0 }
 const PAGE = 200
 
 interface Toast {
@@ -38,30 +49,56 @@ interface Toast {
 
 export default function App() {
   const [library, setLibrary] = useState<string | null>(null)
+  /** 从图库切到欢迎页时记住原图库，方便一键返回 */
+  const [switchingFrom, setSwitchingFrom] = useState<string | null>(null)
   const [booting, setBooting] = useState(true)
   const [items, setItems] = useState<Item[]>([])
   const [total, setTotal] = useState(0)
   const [tags, setTags] = useState<Tag[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [smarts, setSmarts] = useState<SmartFolder[]>([])
+  const [dirTree, setDirTree] = useState<ImportDirNode[]>([])
   const [stats, setStats] = useState<Stats>(EMPTY_STATS)
   const [filter, setFilter] = useState<FilterState>({ sort: 'added' })
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
   const [lightboxId, setLightboxId] = useState<number | null>(null)
+  const [revealTick, setRevealTick] = useState(0)
   const [thumbSize, setThumbSize] = useState(230)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importRunning, setImportRunning] = useState(false)
+  const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
+  const [importOptions, setImportOptions] = useState<ImportOptions>({
+    recursive: true,
+    skipDuplicates: true
+  })
   const [duplicatesOpen, setDuplicatesOpen] = useState(false)
   const [autoBackupOpen, setAutoBackupOpen] = useState(false)
   const [autoTagOpen, setAutoTagOpen] = useState(false)
   const [relocateOpen, setRelocateOpen] = useState(false)
   const [equipmentOpen, setEquipmentOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('appearance')
+  /** 上次的索引目录里没有 library.db：在欢迎页上说清楚，别让用户以为图库没了 */
+  const [indexMissing, setIndexMissing] = useState<string | null>(null)
+  const [adviceOpen, setAdviceOpen] = useState(false)
+  const [aiScoring, setAiScoring] = useState(false)
+  /** 大模型是否可用：关掉开关或没存 Key 时，相册里的 AI 入口只引导去设置，不发请求 */
+  const [aiReady, setAiReady] = useState(false)
+  /** 每个能力自己的开关，关掉后对应入口直接隐藏 */
+  const [aiCaps, setAiCaps] = useState<Record<string, boolean>>({})
+  const [smartFilterOpen, setSmartFilterOpen] = useState(false)
+  /** AI 筛选用的规则文案，仅用于工具栏 chip 展示；筛选条件本身在 filter.onlyIds 里 */
+  const [aiRule, setAiRule] = useState<string | null>(null)
   const [theme, setTheme] = useState<ThemeMode>('system')
+  const [skin, setSkin] = useState<SkinId>('classic')
   const [lastRelocateDir, setLastRelocateDir] = useState<string | null>(null)
   const [semanticMode, setSemanticMode] = useState(false)
   const [clipStatus, setClipStatus] = useState<ClipStatus | null>(null)
   const [clipProgress, setClipProgress] = useState<ClipProgress | null>(null)
+  const [clipCardMinimized, setClipCardMinimized] = useState(false)
   const [clipDownload, setClipDownload] = useState<ClipDownloadProgress | null>(null)
   const [similar, setSimilar] = useState<{ id: number; name: string } | null>(null)
   const [loading, setLoading] = useState(false)
@@ -77,11 +114,18 @@ export default function App() {
   const filterRef = useRef(filter)
   const loadingMoreRef = useRef(false)
   const undoRef = useRef<Array<{ label: string; run: () => Promise<void> }>>([])
+  const aiScoringRef = useRef(false)
 
   filterRef.current = { ...filter, expandedGroups }
   totalRef.current = total
 
   const bump = useCallback(() => setTick((v) => v + 1), [])
+
+  /** 打开设置；从 AI 弹窗点「去设置」时直接落到「大模型」分类 */
+  const openSettings = useCallback((tab: SettingsTab = 'appearance') => {
+    setSettingsTab(tab)
+    setSettingsOpen(true)
+  }, [])
 
   const applyItems = useCallback((list: Item[]) => {
     itemsRef.current = list
@@ -114,24 +158,59 @@ export default function App() {
     }
   }, [notify])
 
+  const closeLightbox = useCallback(() => {
+    const id = lightboxId
+    setLightboxId(null)
+    if (id === null) return
+    // 退出大图后把焦点交回图库：选中当前这张，并让瀑布流滚到它
+    setActiveId(id)
+    setSelectedIds([id])
+    setRevealTick((value) => value + 1)
+  }, [lightboxId])
+
   const refreshMeta = useCallback(async () => {
-    const [nextTags, nextFolders, nextSmarts, nextStats] = await Promise.all([
+    const [nextTags, nextFolders, nextSmarts, nextStats, nextDirs] = await Promise.all([
       window.api.listTags(),
       window.api.listFolders(),
       window.api.listSmart(),
-      window.api.stats()
+      window.api.stats(),
+      window.api.listDirTree()
     ])
     setTags(nextTags)
     setFolders(nextFolders)
     setSmarts(nextSmarts)
     setStats(nextStats)
+    setDirTree(nextDirs)
   }, [])
+
+  useEffect(() => {
+    void window.api.getImportOptions().then(setImportOptions)
+  }, [])
+
+  // 打开图库时看看上次有没有被中断的导入任务
+  useEffect(() => {
+    if (!library) {
+      setPendingImport(null)
+      return
+    }
+    let cancelled = false
+    void window.api
+      .pendingImport()
+      .then((task) => {
+        if (!cancelled) setPendingImport(task)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [library])
 
   useEffect(() => {
     window.api
       .lastLibrary()
-      .then((dir) => {
-        if (dir) setLibrary(dir)
+      .then((result) => {
+        if (result?.dir) setLibrary(result.dir)
+        else if (result?.indexMissing) setIndexMissing(result.indexMissing)
       })
       .catch(() => undefined)
       .finally(() => setBooting(false))
@@ -149,6 +228,17 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    window.api
+      .getSkin()
+      .then((id) => {
+        setSkin(id)
+        applySkin(id)
+        cacheSkin(id)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
     applyTheme(theme)
     return watchSystemTheme(() => {
       if (theme === 'system') applyTheme('system')
@@ -159,6 +249,12 @@ export default function App() {
     setTheme(mode)
     cacheTheme(mode)
     applyTheme(mode)
+  }, [])
+
+  const changeSkin = useCallback((id: SkinId) => {
+    setSkin(id)
+    applySkin(id)
+    cacheSkin(id)
   }, [])
 
   useEffect(() => {
@@ -208,6 +304,7 @@ export default function App() {
   }, [library, tick])
 
   useEffect(() => window.api.onClipIndex(setClipProgress), [])
+  useEffect(() => window.api.onClipAutoStatus(setClipStatus), [])
   useEffect(() => window.api.onClipDownload(setClipDownload), [])
 
   useEffect(() => window.api.onImportProgress(setProgress), [])
@@ -239,32 +336,96 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [toast])
 
-  const runImport = useCallback(
-    async (paths: string[]) => {
+  const startImport = useCallback(
+    async (paths: string[], override?: ImportOptions) => {
       if (!paths.length) return
+      const options = override ?? importOptions
+      if (override) setImportOptions(override)
+      setPendingImport(null)
+      setImportOpen(false)
+      setImportResult(null)
+      setProgress(null)
+      setImportRunning(true)
       try {
-        const result = await window.api.importPaths(paths)
-        const relinked = result.relinked > 0 ? ` · 找回 ${result.relinked}` : ''
-        notify(`导入完成 · 新增 ${result.added}${relinked} · 跳过 ${result.skipped} · 失败 ${result.failed}`)
-      } catch (error) {
-        notify(`导入失败：${(error as Error).message}`)
-      } finally {
-        setProgress(null)
+        const result = await window.api.importPaths(paths, options)
+        setImportResult(result)
+        // 只导入了一个文件夹时，视图直接切到它，按原目录结构展示
+        if (result.roots.length === 1) {
+          setFilter((prev) => ({ sort: prev.sort, dir: result.roots[0] }))
+        }
         setTick((v) => v + 1)
+      } catch (error) {
+        const text = (error as Error).message
+          .replace(/^Error invoking remote method '[^']+':\s*/, '')
+          .replace(/^Error:\s*/, '')
+        notify(`导入失败：${text}`)
+      } finally {
+        setImportRunning(false)
+        setProgress(null)
       }
     },
-    [notify]
+    [importOptions, notify]
   )
 
   const importFiles = useCallback(async () => {
     const paths = await window.api.pickImages()
-    await runImport(paths)
-  }, [runImport])
+    await startImport(paths)
+  }, [startImport])
 
   const importFolder = useCallback(async () => {
     const dir = await window.api.pickFolder()
-    if (dir) await runImport([dir])
-  }, [runImport])
+    if (dir) await startImport([dir])
+  }, [startImport])
+
+  const openImportDialog = useCallback(() => setImportOpen(true), [])
+
+  const resumePendingImport = useCallback(() => {
+    if (!pendingImport) return
+    // 继续时强制跳过已导入的照片，只处理剩下的
+    void startImport(pendingImport.paths, { ...pendingImport.options, skipDuplicates: true })
+  }, [pendingImport, startImport])
+
+  const discardPendingImport = useCallback(() => {
+    void window.api.discardPendingImport()
+    setPendingImport(null)
+    notify('已忽略上次未完成的导入')
+  }, [notify])
+
+  const syncLibrary = useCallback(async () => {
+    if (importRunning) {
+      notify('正在导入，等当前任务结束再刷新')
+      return
+    }
+    setImportOpen(false)
+    setImportResult(null)
+    setProgress(null)
+    setImportRunning(true)
+    try {
+      const result = await window.api.syncLibrary()
+      const parts = [
+        `扫描 ${result.scanned}`,
+        `新增 ${result.added}`,
+        `丢失 ${result.missing}`,
+        `恢复 ${result.restored}`,
+        `刷新 ${result.refreshed}`
+      ]
+      if (result.failed > 0) parts.push(`失败 ${result.failed}`)
+      const roots =
+        result.missingRoots.length > 0
+          ? ` · ${result.missingRoots.length} 个源目录已不在原位，可用「重新定位」接回`
+          : ''
+      notify(`刷新完成 · ${parts.join(' · ')}${roots}`)
+      setTick((value) => value + 1)
+    } catch (error) {
+      const text = (error as Error).message
+        .replace(/^Error invoking remote method '[^']+':\s*/, '')
+        .replace(/^Error:\s*/, '')
+      notify(`刷新失败：${text}`)
+    } finally {
+      setImportRunning(false)
+      setProgress(null)
+    }
+  }, [importRunning, notify])
 
   const loadMore = useCallback(async () => {
     if (semanticMode || similar) return
@@ -308,7 +469,7 @@ export default function App() {
       if (e.dataTransfer?.types.includes('application/x-imagenest-items')) return
       const files = Array.from(e.dataTransfer?.files ?? [])
       const paths = files.map((f) => window.api.getPathForFile(f)).filter(Boolean)
-      void runImport(paths)
+      void startImport(paths)
     }
     window.addEventListener('dragenter', onDragEnter)
     window.addEventListener('dragover', onDragOver)
@@ -320,7 +481,7 @@ export default function App() {
       window.removeEventListener('dragleave', onDragLeave)
       window.removeEventListener('drop', onDrop)
     }
-  }, [library, runImport])
+  }, [library, startImport])
 
   const deleteSelected = useCallback(async () => {
     const ids = selectedIds.length ? [...selectedIds] : activeId ? [activeId] : []
@@ -375,6 +536,98 @@ export default function App() {
     [selectedIds, activeId, pushUndo, bump]
   )
 
+  /**
+   * 大模型评分：一次最多 12 张（能力侧也会拦），结果由主进程直接落库，
+   * 这里只负责刷新列表，让卡片角标与详情面板立刻读到分数。
+   */
+  const scoreItems = useCallback(
+    async (ids: number[]) => {
+      if (!ids.length || aiScoringRef.current) return
+      const picked = ids.slice(0, 12)
+      aiScoringRef.current = true
+      setAiScoring(true)
+      try {
+        const outcome = await window.api.llmScore(picked)
+        if (!outcome.ok) {
+          notify(outcome.message)
+          return
+        }
+        const { results, failed, persisted } = outcome.data
+        const average = results.length
+          ? Math.round(results.reduce((sum, item) => sum + item.overall, 0) / results.length)
+          : 0
+        const extra = [
+          failed.length ? `${failed.length} 张失败` : '',
+          ids.length > picked.length ? `只评了前 ${picked.length} 张` : ''
+        ]
+          .filter(Boolean)
+          .join('，')
+        notify(`已评分 ${persisted} 张，平均 ${average} 分${extra ? `（${extra}）` : ''}`)
+        bump()
+      } catch (error) {
+        // IPC 层本身出错（例如主进程没准备好）时也要给用户回执，不能静默失败
+        notify(`评分失败：${(error as Error).message}`)
+      } finally {
+        aiScoringRef.current = false
+        setAiScoring(false)
+      }
+    },
+    [notify, bump]
+  )
+
+  const clearAiFilter = useCallback(() => {
+    setAiRule(null)
+    setFilter((prev) => ({ ...prev, onlyIds: undefined }))
+  }, [])
+
+  // 设置面板开关/换 Key 后回到主界面要立刻反映到 AI 入口的可用状态
+  useEffect(() => {
+    if (!library) return
+    void window.api
+      .llmStatus()
+      .then((status) => {
+        setAiReady(status.config.enabled && status.hasKey && Boolean(status.config.model.trim()))
+        setAiCaps(
+          Object.fromEntries(status.capabilities.map((capability) => [capability.id, capability.enabled]))
+        )
+      })
+      .catch(() => {
+        setAiReady(false)
+        setAiCaps({})
+      })
+  }, [library, settingsOpen])
+
+  // AI 评分入口被关掉（或总开关关闭）时，把隐藏起来的 AI 排序与筛选项一并复位，
+  // 免得不显示却还在偷偷过滤结果
+  const aiScoreAvailable = aiReady && aiCaps['photo.quality'] !== false
+  useEffect(() => {
+    if (aiScoreAvailable) return
+    if ((filter.sort ?? 'added') !== 'ai' && !filter.minAiScore && !filter.unscored) return
+    setFilter((prev) => ({
+      ...prev,
+      sort: prev.sort === 'ai' ? 'added' : prev.sort,
+      minAiScore: 0,
+      unscored: false
+    }))
+  }, [aiScoreAvailable, filter.sort, filter.minAiScore, filter.unscored])
+
+  const applyAiFilter = useCallback(
+    (rule: string, ids: number[]) => {
+      setAiRule(rule)
+      setFilter((prev) => ({ ...prev, onlyIds: ids }))
+      setSmartFilterOpen(false)
+      setSelectedIds([])
+      setActiveId(null)
+      notify(`AI 筛出 ${ids.length} 张：${rule}`)
+    },
+    [notify]
+  )
+
+  // 从侧栏或其它入口换掉整套筛选条件时，AI 规则文案也要跟着消失，避免 chip 与结果不一致
+  useEffect(() => {
+    if (aiRule && !filter.onlyIds?.length) setAiRule(null)
+  }, [aiRule, filter.onlyIds])
+
   const stackSelected = useCallback(async () => {
     if (selectedIds.length < 2) return
     try {
@@ -428,7 +681,7 @@ export default function App() {
       }
 
       if (e.key === 'Escape') {
-        if (lightboxId) setLightboxId(null)
+        if (lightboxId) closeLightbox()
         else if (activeId) setActiveId(null)
         else setSelectedIds([])
         return
@@ -438,13 +691,12 @@ export default function App() {
       if (typing) return
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        // 只全选"当前已加载"的图片：不去主进程拉全库 id，避免一次选中上万张后再逐条发 IPC
         e.preventDefault()
-        if (semanticMode || similar) {
-          // 语义/相似模式下列表就是结果集，直接全选
-          setSelectedIds(itemsRef.current.map((i) => i.id))
-          return
-        }
-        void window.api.filteredIds(filterRef.current).then(setSelectedIds)
+        const loaded = itemsRef.current
+        if (loaded.length === 0) return
+        setSelectedIds(loaded.map((item) => item.id))
+        notify(`已选中当前加载的 ${loaded.length} 张`)
         return
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
@@ -502,13 +754,13 @@ export default function App() {
     selectedIds,
     lightboxId,
     activeId,
-    semanticMode,
-    similar,
+    closeLightbox,
     deleteSelected,
     rateSelected,
     setFlagSelected,
     moveSelection,
-    undoLast
+    undoLast,
+    notify
   ])
 
   const handleSelect = (id: number, e: ReactMouseEvent): void => {
@@ -647,10 +899,13 @@ export default function App() {
 
   const startClipIndex = async (): Promise<void> => {
     try {
+      setClipCardMinimized(false)
       setClipProgress({ done: 0, total: 0, current: '' })
       const result = await window.api.clipIndex()
       notify(
-        `语义索引完成 · 新增 ${result.indexed} 张${result.failed ? ` · 失败 ${result.failed}` : ''}`
+        result.cancelled
+          ? `语义索引已停止 · 本次新增 ${result.indexed} 张`
+          : `语义索引完成 · 新增 ${result.indexed} 张${result.failed ? ` · 失败 ${result.failed}` : ''}`
       )
       setClipStatus(await window.api.clipStatus())
       bump()
@@ -728,12 +983,15 @@ export default function App() {
     filter.sort ?? '',
     filter.query ?? '',
     filter.folderId ?? '',
+    filter.dir ?? '',
+    filter.errors ? 'errors' : '',
     (filter.tagIds ?? []).join(','),
     filter.colorFamily ?? '',
     filter.orientation ?? '',
     filter.minRating ?? 0,
     filter.flag ?? 0,
     filter.missing ? 'missing' : '',
+    (filter.onlyIds ?? []).join(','),
     semanticMode ? 'sem' : '',
     similar ? `sim${similar.id}` : ''
   ].join('|')
@@ -747,7 +1005,21 @@ export default function App() {
   if (!library) {
     return (
       <Welcome
+        onBack={
+          switchingFrom
+            ? () => {
+                const back = switchingFrom
+                setSwitchingFrom(null)
+                setLibrary(back)
+                setTick((value) => value + 1)
+              }
+            : undefined
+        }
+        backLabel={switchingFrom ? folderName(switchingFrom) : undefined}
+        notice={indexMissing}
         onReady={(dir) => {
+          setSwitchingFrom(null)
+          setIndexMissing(null)
           setLibrary(dir)
           setFilter({ sort: 'added' })
           setSelectedIds([])
@@ -768,17 +1040,22 @@ export default function App() {
           tags={tags}
           folders={folders}
           smarts={smarts}
+          dirTree={dirTree}
           filter={filter}
           onFilter={(next) => {
             setFilter(next)
             setSelectedIds([])
             setActiveId(null)
           }}
-          onImportFiles={importFiles}
-          onImportFolder={importFolder}
+          onImportFiles={openImportDialog}
+          onImportFolder={openImportDialog}
+          onSync={() => void syncLibrary()}
           onRescan={rescan}
           onDuplicates={() => setDuplicatesOpen(true)}
-          onSwitch={() => setLibrary(null)}
+          onSwitch={() => {
+            setSwitchingFrom(library)
+            setLibrary(null)
+          }}
           onBackup={backupLibrary}
           onRestore={restoreLibrary}
           onExport={exportCsv}
@@ -789,7 +1066,7 @@ export default function App() {
           onRelocate={() => setRelocateOpen(true)}
           lastRelocateDir={lastRelocateDir}
           onEquipment={() => setEquipmentOpen(true)}
-          onSettings={() => setSettingsOpen(true)}
+          onSettings={() => openSettings('appearance')}
           onCreateFolder={createFolder}
           onDropItems={handleDropItems}
           onDeleteFolder={async (id) => {
@@ -827,6 +1104,14 @@ export default function App() {
             onRateSelected={rateSelected}
             onFlagSelected={setFlagSelected}
             onStackSelected={stackSelected}
+            onScoreSelected={() => void scoreItems(selectedIds)}
+            aiScoring={aiScoring}
+            aiRule={aiRule}
+            onOpenSmartFilter={() => setSmartFilterOpen(true)}
+            onClearAi={clearAiFilter}
+            aiReady={aiReady}
+            canScore={aiCaps['photo.quality'] !== false}
+            canSmartFilter={aiCaps['photo.smartFilter'] !== false}
             semanticMode={semanticMode}
             clipStatus={clipStatus}
             onToggleSemantic={() => void toggleSemantic()}
@@ -855,15 +1140,18 @@ export default function App() {
             hasMore={!similar && !semanticMode && items.length < total}
             resetKey={listResetKey}
             focusId={activeId}
+            focusTick={revealTick}
             expandedGroups={expandedGroups}
             onExpandGroup={toggleGroup}
             onLoadMore={loadMore}
             onSelect={handleSelect}
             onOpen={(id) => setLightboxId(id)}
-            onImportFiles={importFiles}
+            onImportFiles={openImportDialog}
             hasFilter={
               Boolean(filter.query) ||
               Boolean(filter.folderId) ||
+              Boolean(filter.dir) ||
+              Boolean(filter.errors) ||
               (filter.tagIds?.length ?? 0) > 0 ||
               Boolean(filter.colorFamily) ||
               Boolean(filter.orientation) ||
@@ -885,6 +1173,12 @@ export default function App() {
             onPushUndo={pushUndo}
             onUnstack={unstackItem}
             onFindSimilar={() => void findSimilar(activeItem.id)}
+            onAdvice={() => setAdviceOpen(true)}
+            onScore={() => void scoreItems([activeItem.id])}
+            aiScoring={aiScoring}
+            aiReady={aiReady}
+            canScore={aiCaps['photo.quality'] !== false}
+            canAdvice={aiCaps['photo.advice'] !== false}
           />
         )}
       </div>
@@ -898,7 +1192,7 @@ export default function App() {
         </div>
       )}
 
-      {progress && progress.total > 0 && (
+      {progress && progress.total > 0 && !importRunning && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 w-[360px] rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 shadow-2xl">
           <div className="flex items-center justify-between text-[12px] mb-2">
             <span className="text-[var(--muted)] truncate pr-3">正在索引 {progress.current || '…'}</span>
@@ -914,6 +1208,27 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {pendingImport && !importRunning && !importResult && (
+        <ResumeImportCard
+          pending={pendingImport}
+          onResume={resumePendingImport}
+          onDiscard={discardPendingImport}
+        />
+      )}
+
+      <ImportStatusCard
+        progress={progress}
+        running={importRunning}
+        result={importResult}
+        onPause={() => void window.api.pauseImport()}
+        onResume={() => void window.api.resumeImport()}
+        onCancel={() => {
+          void window.api.cancelImport()
+          notify('正在停止导入…')
+        }}
+        onDismiss={() => setImportResult(null)}
+      />
 
       {clipDownload && (
         <div className="absolute bottom-[86px] left-1/2 -translate-x-1/2 z-40 w-[360px] rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 shadow-2xl">
@@ -941,28 +1256,70 @@ export default function App() {
       )}
 
       {clipProgress && !clipDownload && (
-        <div className="absolute bottom-[86px] left-1/2 -translate-x-1/2 z-40 w-[360px] rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 shadow-2xl">
-          <div className="flex items-center justify-between text-[12px] mb-2">
-            <span className="text-[var(--muted)] truncate pr-3">
-              语义索引 {clipProgress.current || ''}
-            </span>
-            <span className="text-[var(--text)] tabular-nums">
+        clipCardMinimized ? (
+          <div className="absolute bottom-[86px] left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 shadow-2xl">
+            <span className="text-[11.5px] text-[var(--muted)]">语义索引</span>
+            <span className="text-[11.5px] text-[var(--text)] tabular-nums">
               {clipProgress.done}/{clipProgress.total}
+              {clipProgress.total
+                ? ` · ${Math.round((clipProgress.done / clipProgress.total) * 100)}%`
+                : ''}
             </span>
+            <button
+              className="btn btn-ghost h-5 px-1"
+              title="展开进度"
+              onClick={() => setClipCardMinimized(false)}
+            >
+              <ChevronUp size={12} />
+            </button>
           </div>
-          <div className="h-[4px] rounded-full bg-[var(--panel-3)] overflow-hidden">
-            <div
-              className="h-full bg-[var(--accent)] transition-[width] duration-200"
-              style={{
-                width: `${
-                  clipProgress.total
-                    ? Math.round((clipProgress.done / clipProgress.total) * 100)
-                    : 0
-                }%`
-              }}
-            />
+        ) : (
+          <div className="absolute bottom-[86px] left-1/2 -translate-x-1/2 z-40 w-[360px] rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 shadow-2xl">
+            <div className="flex items-center justify-between text-[12px] mb-2">
+              <span className="text-[var(--muted)] truncate pr-3">
+                语义索引 {clipProgress.current || ''}
+              </span>
+              <span className="flex items-center gap-1 shrink-0">
+                <span className="text-[var(--text)] tabular-nums">
+                  {clipProgress.done}/{clipProgress.total}
+                </span>
+                <button
+                  className="btn btn-ghost h-5 px-1"
+                  title="最小化，处理别的事"
+                  onClick={() => setClipCardMinimized(true)}
+                >
+                  <ChevronDown size={12} />
+                </button>
+              </span>
+            </div>
+            <div className="h-[4px] rounded-full bg-[var(--panel-3)] overflow-hidden">
+              <div
+                className="h-full bg-[var(--accent)] transition-[width] duration-200"
+                style={{
+                  width: `${
+                    clipProgress.total
+                      ? Math.round((clipProgress.done / clipProgress.total) * 100)
+                      : 0
+                  }%`
+                }}
+              />
+            </div>
+            <div className="mt-2 flex items-center gap-1.5">
+              <button
+                className="btn btn-ghost btn-danger h-6 px-2 text-[11px]"
+                onClick={() => {
+                  void window.api.clipCancel()
+                  notify('正在停止语义索引…')
+                }}
+              >
+                停止索引
+              </button>
+              <span className="ml-auto text-[10.5px] text-[var(--faint)]">
+                只占用 2 个 CPU 线程
+              </span>
+            </div>
           </div>
-        </div>
+        )
       )}
 
       {toast && (
@@ -983,11 +1340,21 @@ export default function App() {
         <Lightbox
           items={items}
           index={lightboxIndex}
-          onClose={() => setLightboxId(null)}
+          onClose={closeLightbox}
           onNavigate={(next) => {
             const item = items[next]
             if (item) setLightboxId(item.id)
           }}
+        />
+      )}
+
+      {importOpen && (
+        <ImportDialog
+          options={importOptions}
+          onOptions={setImportOptions}
+          onPickFolder={importFolder}
+          onPickFiles={importFiles}
+          onClose={() => setImportOpen(false)}
         />
       )}
 
@@ -1051,7 +1418,28 @@ export default function App() {
         <SettingsDialog
           theme={theme}
           onChange={changeTheme}
+          skin={skin}
+          onSkin={changeSkin}
           onClose={() => setSettingsOpen(false)}
+          initialTab={settingsTab}
+        />
+      )}
+
+      {adviceOpen && activeItem && (
+        <AdviceDialog
+          item={activeItem}
+          onClose={() => setAdviceOpen(false)}
+          onOpenSettings={() => openSettings('llm')}
+        />
+      )}
+
+      {smartFilterOpen && (
+        <SmartFilterDialog
+          items={items}
+          total={total}
+          onApply={applyAiFilter}
+          onClose={() => setSmartFilterOpen(false)}
+          onOpenSettings={() => openSettings('llm')}
         />
       )}
     </div>

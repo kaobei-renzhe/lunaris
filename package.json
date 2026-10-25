@@ -1,6 +1,6 @@
 {
   "name": "image-nest",
-  "version": "0.1.1",
+  "version": "0.1.30",
   "description": "本地素材巢：图片、相机与文字的归置空间",
   "main": "./out/main/index.js",
   "author": "silvermoon",
@@ -15,7 +15,10 @@
     "files": [
       "out/**/*",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "!**/node_modules/onnxruntime-node/bin/napi-*/darwin/**",
+      "!**/node_modules/onnxruntime-node/bin/napi-*/linux/**",
+      "!**/node_modules/onnxruntime-node/bin/napi-*/win32/arm64/**"
     ],
     "asarUnpack": [
       "**/*.node",
@@ -39,7 +42,8 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "dist": "electron-vite build && electron-builder --win --publish never"
+    "bench": "node scripts/bench.mjs",
+    "dist": "electron-vite build && electron-builder --win --publish never && node scripts/clean-release.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

@@ -1,8 +1,17 @@
 import { useState } from 'react'
-import { FolderOpen, Plus } from 'lucide-react'
+import { ArrowLeft, FolderOpen, Plus } from 'lucide-react'
 import Logo from './Logo'
 
-export default function Welcome({ onReady }: { onReady: (dir: string) => void }) {
+interface WelcomeProps {
+  onReady: (dir: string) => void
+  /** 从已有图库切过来时，可以不做任何操作直接返回 */
+  onBack?: () => void
+  backLabel?: string
+  /** 上次的索引目录失效时的说明（原图还在，索引需要重建） */
+  notice?: string | null
+}
+
+export default function Welcome({ onReady, onBack, backLabel, notice }: WelcomeProps) {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -37,6 +46,13 @@ export default function Welcome({ onReady }: { onReady: (dir: string) => void })
   return (
     <div className="h-full grid place-items-center bg-[var(--bg)]">
       <div className="w-[440px] text-center">
+        {onBack && (
+          <div className="flex justify-start mb-4">
+            <button className="btn btn-ghost h-7 px-2 text-[11.5px]" onClick={onBack}>
+              <ArrowLeft size={13} /> 返回{backLabel ? `「${backLabel}」` : '当前图库'}
+            </button>
+          </div>
+        )}
         <div className="mx-auto mb-6 w-[64px] h-[64px]">
           <Logo size={64} />
         </div>
@@ -53,6 +69,17 @@ export default function Welcome({ onReady }: { onReady: (dir: string) => void })
             <FolderOpen size={16} /> 打开已有图库
           </button>
         </div>
+
+        {notice && (
+          <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5 text-left text-[11.5px] leading-5 text-[var(--danger-text)]">
+            上次的索引目录里找不到 library.db：
+            <span className="break-all">{notice}</span>
+            <div className="mt-1 text-[var(--muted)]">
+              索引可能被移动或删除了（把索引放在应用安装目录时，升级安装会把它清掉）。
+              原图都还在图库里——打开图库后点「刷新图库」就能重建索引，但标签、评分等元数据无法恢复。
+            </div>
+          </div>
+        )}
 
         {error && <div className="mt-4 text-[12px] text-[var(--danger)]">{error}</div>}
 

@@ -2,19 +2,57 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { BrowserWindow, ClipboardItem, app, clipboard, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import sharp from 'sharp'
-import { getLibraryPath, openLibrary } from './db'
-import { importPaths, rebuildThumbs } from './importer'
+import { getIndexPath, getLibraryPath, openLibrary, resolveIndexDir } from './db'
+import {
+  importPaths,
+  rebuildThumbs,
+  cancelImport,
+  clearPendingImport,
+  getPendingImport,
+  importStatus,
+  pauseImport,
+  resumeImport
+} from './importer'
 import { regroup } from './grouping'
 import { buildCsv, createBackup, restoreBackup } from './backup'
-import { getAutoBackup, getTheme, readConfig, saveAutoBackup, saveTheme, updateConfig } from './settings'
+import { log } from './logger'
+import {
+  getAutoBackup,
+  getClipAutoIndex,
+  getImportOptions,
+  getIndexDirFor,
+  getSkin,
+  getTheme,
+  libraryKey,
+  readConfig,
+  saveAutoBackup,
+  saveClipAutoIndex,
+  saveImportOptions,
+  saveSkin,
+  saveTheme,
+  setIndexDirFor,
+  updateConfig
+} from './settings'
 import { startAutoBackup } from './scheduler'
 import { clipStatus, cancelClipIndex, indexEmbeddings, invalidateClipCache, searchByText, searchSimilar } from './embeddings'
 import { autoTagStatus, clearAutoTags, getAutoTagSettings, listAutoTagCategories, runAutoTag, saveAutoTagSettings } from './autoTag'
 import { downloadModel } from './clip/download'
 import { resetModel } from './clip/embedder'
+import { startAutoClipIndex, stopAutoClipIndex } from './clip/autoIndex'
 import { applyRelocate, buildRelocatePlan, getLastRelocateDir, rememberRelocateDir } from './relocate'
-import { deleteGear, deleteKit, gearCatalog, gearScenarios, gearUsage, listGear, listKits, recommendGear, saveGear, saveKit } from './gear'
+import { deleteGear, deleteKit, gearCatalog, gearScenarios, gearSuggestions, gearUsage, listGear, listKits, recommendGear, saveGear, saveKit } from './gear'
 import { startWatching, stopWatching } from './watcher'
+import { syncLibrary } from './sync'
+import { moveIndexTo } from './libraryStore'
+import {
+  getStatus as getLlmStatus,
+  removeApiKey,
+  runCapability,
+  saveApiKey,
+  scorePhotos,
+  testConnection,
+  updateConfig as updateLlmConfig
+} from './llm'
 import {
   addToFolder,
   createFolder,
@@ -26,9 +64,9 @@ import {
   findDuplicates,
   getItem,
   getItemFile,
-  filteredIds,
   listFolders,
   listItems,
+  listDirTree,
   listSmart,
   listTags,
   removeFromFolder,
@@ -43,8 +81,21 @@ import {
   updateItem
 } from './repo'
 import type { AutoBackupSettings } from './settings'
-import type { AutoTagSettings, FilterState, GearSpec, RelocatePair, ScenarioId, ThemeMode } from '../shared/types'
+import type {
+  AppDialogOptions,
+  AppDialogResult,
+  AutoTagSettings,
+  FilterState,
+  GearSpec,
+  ImportOptions,
+  RelocatePair,
+  ScenarioId,
+  ThemeMode,
+  IndexMoveResult
+} from '../shared/types'
 import { SUPPORTED_EXT_LIST } from '../shared/formats'
+import type { LlmConfig, LlmErrorCode, LlmRunOutcome } from '../shared/llm'
+import { SKINS, type SkinId } from '../shared/skins'
 
 const IMAGE_FILTERS = [
   {
@@ -57,6 +108,56 @@ function activeWindow(): BrowserWindow | null {
   return BrowserWindow.getAllWindows()[0] ?? null
 }
 
+let dialogSeq = 1
+const pendingDialogs = new Map<number, (result: AppDialogResult) => void>()
+
+/** 请求界面用自己的弹窗渲染；窗口不在时退回系统弹窗，避免流程卡死 */
+function askDialog(options: AppDialogOptions): Promise<AppDialogResult> {
+  const win = activeWindow()
+  // 界面还没加载完就发事件会丢，这时退回系统弹窗
+  if (!win || win.webContents.isLoading()) {
+    const buttons = options.onlyConfirm ? [options.confirmText ?? '知道了'] : [options.cancelText ?? '取消', options.confirmText ?? '确定']
+    return dialog
+      .showMessageBox({
+        type: options.kind === 'error' ? 'error' : options.kind === 'info' ? 'info' : 'warning',
+        buttons,
+        defaultId: options.onlyConfirm ? 0 : 1,
+        cancelId: 0,
+        message: options.title,
+        detail: options.detail
+      })
+      .then((result) => ({
+        confirmed: options.onlyConfirm ? true : result.response === 1,
+        checked: Boolean(options.checkboxChecked)
+      }))
+  }
+
+  const id = dialogSeq++
+  return new Promise((resolve) => {
+    pendingDialogs.set(id, resolve)
+    win.webContents.send('ui:dialog-request', { id, ...options })
+  })
+}
+
+/** 暂停/继续/取消后立刻把最新状态推给界面，不用等下一个文件处理完 */
+function pushImportStatus(): void {
+  const status = importStatus()
+  if (status) activeWindow()?.webContents.send('import:progress', status)
+}
+
+/** 切换界面风格时同步原生控件深浅与窗口底色，避免露出白底 */
+function applySkinNative(id: SkinId): void {
+  const def = SKINS.find((skin) => skin.id === id) ?? SKINS[0]
+  nativeTheme.themeSource = def.mode === 'auto' ? getTheme() : def.mode
+  const background =
+    def.mode === 'auto'
+      ? nativeTheme.shouldUseDarkColors
+        ? '#0b0d11'
+        : '#f6f7fa'
+      : def.base
+  for (const win of BrowserWindow.getAllWindows()) win.setBackgroundColor(background)
+}
+
 function restartWatcher(): void {
   startWatching((info) => {
     activeWindow()?.webContents.send('library:changed', info)
@@ -65,6 +166,7 @@ function restartWatcher(): void {
 
 export function stopLibraryWatcher(): void {
   stopWatching()
+  stopAutoClipIndex()
 }
 
 export function registerIpc(): void {
@@ -78,6 +180,8 @@ export function registerIpc(): void {
 
   ipcMain.handle('library:create', async (_e, dir: string) => {
     mkdirSync(dir, { recursive: true })
+    // 新建的图库从零开始，索引就用这个文件夹，别沿用同路径下的旧映射
+    setIndexDirFor(dir, null)
     openLibrary(dir)
     regroup()
     invalidateClipCache()
@@ -88,6 +192,8 @@ export function registerIpc(): void {
 
   ipcMain.handle('library:open', async (_e, dir: string) => {
     if (!existsSync(dir)) throw new Error('图库目录不存在')
+    // 用户主动打开一个带 library.db 的目录时，以目录内的索引为准
+    if (existsSync(join(dir, 'library.db'))) setIndexDirFor(dir, null)
     openLibrary(dir)
     regroup()
     invalidateClipCache()
@@ -98,22 +204,57 @@ export function registerIpc(): void {
 
   ipcMain.handle('library:last', async () => {
     const config = readConfig()
-    if (config.library && existsSync(join(config.library, 'library.db'))) {
-      // 重启后需要重新打开上次使用的图库，否则渲染层拿不到数据
-      openLibrary(config.library)
-      regroup()
-      invalidateClipCache()
-      restartWatcher()
-      return config.library
+    if (!config.library) return { dir: null }
+    const indexDir = resolveIndexDir(config.library)
+    if (!existsSync(join(indexDir, 'library.db'))) {
+      // 索引目录不在了：把原因带回界面，别让用户以为图库凭空消失
+      const mapped = getIndexDirFor(config.library)
+      const missing = libraryKey(mapped) !== libraryKey(config.library) ? mapped : undefined
+      void log.warn('library', '上次的索引目录里没有 library.db', {
+        library: config.library,
+        indexDir
+      })
+      return { dir: null, indexMissing: missing }
     }
-    return null
+    // 重启后需要重新打开上次使用的图库，否则渲染层拿不到数据
+    openLibrary(config.library)
+    regroup()
+    invalidateClipCache()
+    restartWatcher()
+    return { dir: config.library }
   })
+
+  /** 索引（db + 缩略图 + 预览）当前放在哪 */
+  ipcMain.handle('library:storage', () => {
+    const library = getLibraryPath()
+    if (!library) return null
+    return { library, indexDir: getIndexPath() || library }
+  })
+
+  const moveIndex = (target: string | null): IndexMoveResult => {
+    try {
+      const result = moveIndexTo(target)
+      return { ok: true, indexDir: result.indexDir, files: result.files, cleaned: result.cleaned }
+    } catch (error) {
+      return { ok: false, message: (error as Error).message }
+    }
+  }
+
+  ipcMain.handle('library:index:pick', async () => {
+    const picked = await dialog.showOpenDialog({
+      title: '选择索引存放文件夹（只放索引与缓存，不动原图）',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return { ok: false, cancelled: true }
+    return moveIndex(picked.filePaths[0])
+  })
+
+  ipcMain.handle('library:index:move', (_e, target: string | null) => moveIndex(target ?? null))
 
   ipcMain.handle('items:list', (_e, filter: FilterState, offset?: number, limit?: number) =>
     listItems(filter ?? {}, offset ?? 0, limit ?? 200)
   )
   ipcMain.handle('items:get', (_e, id: number) => getItem(id))
-  ipcMain.handle('items:filteredIds', (_e, filter: FilterState) => [...filteredIds(filter ?? {})])
   ipcMain.handle(
     'items:update',
     (_e, id: number, patch: { rating?: number; note?: string; url?: string; flag?: number }) => {
@@ -183,12 +324,60 @@ export function registerIpc(): void {
     return result.canceled ? null : result.filePaths[0]
   })
 
-  ipcMain.handle('import:paths', async (_e, paths: string[]) => {
+  ipcMain.handle('import:paths', async (_e, paths: string[], options?: Partial<ImportOptions>) => {
     const win = activeWindow()
-    const result = await importPaths(paths, (progress) => {
-      win?.webContents.send('import:progress', progress)
-    })
+    // 记住这次的扫描选项，下次导入自动沿用
+    const settings = saveImportOptions(options ?? {})
+    const result = await importPaths(
+      paths ?? [],
+      (progress) => {
+        win?.webContents.send('import:progress', progress)
+      },
+      true,
+      settings
+    )
     // 新导入的目录要纳入监听范围
+    restartWatcher()
+    return result
+  })
+
+  ipcMain.handle('import:pause', () => {
+    pauseImport()
+    pushImportStatus()
+  })
+
+  ipcMain.handle('import:resume', () => {
+    resumeImport()
+    pushImportStatus()
+  })
+
+  ipcMain.handle('import:cancel', () => {
+    cancelImport()
+    pushImportStatus()
+  })
+
+  ipcMain.handle('import:status', () => importStatus())
+
+  ipcMain.handle('import:options:get', () => getImportOptions())
+
+  ipcMain.handle('import:options:save', (_e, patch: Partial<ImportOptions>) =>
+    saveImportOptions(patch ?? {})
+  )
+
+  ipcMain.handle('import:pending', () => getPendingImport())
+
+  ipcMain.handle('import:pending:discard', () => {
+    clearPendingImport()
+  })
+
+  ipcMain.handle('dirs:tree', () => listDirTree())
+
+  ipcMain.handle('library:sync', async () => {
+    const win = activeWindow()
+    const result = await syncLibrary((progress) => {
+      win?.webContents.send('import:progress', progress)
+    }, getImportOptions())
+    // 新出现的目录也要纳入监听
     restartWatcher()
     return result
   })
@@ -196,17 +385,14 @@ export function registerIpc(): void {
   ipcMain.handle('duplicates:find', () => findDuplicates())
 
   ipcMain.handle('library:backup', async () => {
-    const choice = await dialog.showMessageBox({
-      type: 'question',
-      buttons: ['开始备份', '取消'],
-      defaultId: 0,
-      cancelId: 1,
-      message: '备份整个图库',
+    const choice = await askDialog({
+      title: '备份整个图库',
       detail: '会把索引数据库（标签、评分、备注、文件夹、堆叠）打包成 zip，原图不会被复制。',
+      confirmText: '开始备份',
       checkboxLabel: '同时打包缩略图与预览（体积更大，恢复后无需重新生成）',
       checkboxChecked: true
     })
-    if (choice.response !== 0) return null
+    if (!choice.confirmed) return null
 
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
     const result = await dialog.showSaveDialog({
@@ -215,7 +401,7 @@ export function registerIpc(): void {
       filters: [{ name: 'Zip 压缩包', extensions: ['zip'] }]
     })
     if (result.canceled || !result.filePath) return null
-    return createBackup(result.filePath, choice.checkboxChecked)
+    return createBackup(result.filePath, choice.checked)
   })
 
   ipcMain.handle('library:restore', async () => {
@@ -236,27 +422,30 @@ export function registerIpc(): void {
     // 不能覆盖当前正在使用的图库：数据库连接还开着（WAL），强行写 library.db 有损坏风险
     const current = getLibraryPath()
     if (current && resolve(dir).toLowerCase() === resolve(current).toLowerCase()) {
-      await dialog.showMessageBox({
-        type: 'error',
-        message: '不能恢复到当前正在使用的图库',
-        detail: '请选择另一个文件夹，或先用左上角「切换图库」关掉当前图库再恢复。'
+      await askDialog({
+        kind: 'error',
+        title: '不能恢复到当前正在使用的图库',
+        detail: '请选择另一个文件夹，或先用左上角「切换图库」关掉当前图库再恢复。',
+        onlyConfirm: true,
+        confirmText: '知道了'
       })
       return null
     }
 
     if (existsSync(join(dir, 'library.db'))) {
-      const confirm = await dialog.showMessageBox({
-        type: 'warning',
-        buttons: ['取消', '覆盖'],
-        defaultId: 0,
-        cancelId: 0,
-        message: '目标文件夹已经有图库',
-        detail: '继续会覆盖其中的 library.db 与缓存文件，请确认没有需要的旧数据。'
+      const confirm = await askDialog({
+        kind: 'warning',
+        title: '目标文件夹已经有图库',
+        detail: '继续会覆盖其中的 library.db 与缓存文件，请确认没有需要的旧数据。',
+        confirmText: '覆盖',
+        danger: true
       })
-      if (confirm.response !== 1) return null
+      if (!confirm.confirmed) return null
     }
 
     restoreBackup(picked.filePaths[0], dir)
+    // 恢复出来的库文件就在这个目录里，清掉可能存在的旧索引映射
+    setIndexDirFor(dir, null)
     openLibrary(dir)
     // 恢复的是另一套数据，旧的向量缓存必须丢弃
     invalidateClipCache()
@@ -319,6 +508,7 @@ export function registerIpc(): void {
   ipcMain.handle('gear:save', (_e, item: GearSpec & { id?: string }) => saveGear(item))
   ipcMain.handle('gear:delete', (_e, id: string) => deleteGear(id))
   ipcMain.handle('gear:catalog', () => gearCatalog())
+  ipcMain.handle('gear:suggestions', () => gearSuggestions())
   ipcMain.handle('gear:scenarios', () => gearScenarios())
   ipcMain.handle('gear:recommend', (_e, scenario: ScenarioId) => recommendGear(scenario))
   ipcMain.handle('gear:usage', () => gearUsage())
@@ -338,9 +528,16 @@ export function registerIpc(): void {
 
   ipcMain.handle('settings:theme:save', (_e, mode: ThemeMode) => {
     const next = saveTheme(mode)
-    nativeTheme.themeSource = next
-    const background = nativeTheme.shouldUseDarkColors ? '#0b0d11' : '#f6f7fa'
-    for (const win of BrowserWindow.getAllWindows()) win.setBackgroundColor(background)
+    // 固定深浅的皮肤会覆盖主题设置，这里统按当前皮肤刷新原生外观
+    applySkinNative(getSkin())
+    return next
+  })
+
+  ipcMain.handle('settings:skin:get', () => getSkin())
+
+  ipcMain.handle('settings:skin:save', (_e, id: SkinId) => {
+    const next = saveSkin(id)
+    applySkinNative(next)
     return next
   })
 
@@ -357,6 +554,10 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('clip:status', () => clipStatus())
+
+  ipcMain.handle('clip:autoIndex:get', () => getClipAutoIndex())
+
+  ipcMain.handle('clip:autoIndex:save', (_e, enabled: boolean) => saveClipAutoIndex(enabled))
 
   ipcMain.handle('clip:index', async () => {
     const win = activeWindow()
@@ -407,25 +608,44 @@ export function registerIpc(): void {
     activeWindow()?.webContents.send('backup:auto', result)
   })
 
+  // 闲时自动建立语义索引：系统空闲 2 分钟后才会开始，小批量慢慢跑
+  startAutoClipIndex((status) => {
+    activeWindow()?.webContents.send('clip:auto-status', status)
+  })
+
   ipcMain.handle('ui:confirm', async (_e, message: string, detail?: string) => {
-    const win = activeWindow()
-    const result = win
-      ? await dialog.showMessageBox(win, {
-          type: 'warning',
-          buttons: ['取消', '确定'],
-          defaultId: 0,
-          cancelId: 0,
-          message,
-          detail
-        })
-      : await dialog.showMessageBox({
-          type: 'warning',
-          buttons: ['取消', '确定'],
-          defaultId: 0,
-          cancelId: 0,
-          message,
-          detail
-        })
-    return result.response === 1
+    const result = await askDialog({ title: message, detail, confirmText: '确定' })
+    return result.confirmed
+  })
+
+  // 大模型：渲染层只碰状态与能力调用，密钥始终留在主进程
+  ipcMain.handle('llm:status', () => getLlmStatus())
+  ipcMain.handle('llm:config:save', (_e, patch: Partial<LlmConfig>) => updateLlmConfig(patch ?? {}))
+  ipcMain.handle('llm:key:save', (_e, key: string) => saveApiKey(String(key ?? '')))
+  ipcMain.handle('llm:key:clear', () => removeApiKey())
+  ipcMain.handle('llm:test', () => testConnection())
+  // 用信封返回：IPC 抛出的 Error 会丢掉 code，渲染层就没法区分"未配置"和"限流"
+  const envelope = async <T>(run: () => Promise<T>): Promise<LlmRunOutcome> => {
+    try {
+      return { ok: true, data: await run() }
+    } catch (error) {
+      const code = (error as { code?: LlmErrorCode }).code ?? 'unknown'
+      return { ok: false, code, message: (error as Error)?.message || '调用失败' }
+    }
+  }
+
+  ipcMain.handle('llm:run', (_e, id: string, input: unknown) =>
+    envelope(() => runCapability(String(id ?? ''), input))
+  )
+  // 评分与其它能力不同：结果要落库，所以单独开一个通道
+  ipcMain.handle('llm:quality', (_e, itemIds: number[]) =>
+    envelope(() => scorePhotos(Array.isArray(itemIds) ? itemIds : []))
+  )
+
+  ipcMain.on('ui:dialog-reply', (_e, id: number, result: AppDialogResult) => {
+    const resolve = pendingDialogs.get(id)
+    if (!resolve) return
+    pendingDialogs.delete(id)
+    resolve({ confirmed: Boolean(result?.confirmed), checked: Boolean(result?.checked) })
   })
 }

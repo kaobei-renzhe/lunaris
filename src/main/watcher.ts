@@ -4,7 +4,9 @@ import { extname, join } from 'node:path'
 import { SUPPORTED_EXT } from '../shared/formats'
 import { listSources, markMissingByPath } from './repo'
 import { importPaths } from './importer'
+import { getImportOptions } from './settings'
 import { regroup } from './grouping'
+import { log } from './logger'
 
 const DEBOUNCE_MS = 800
 
@@ -59,10 +61,16 @@ export function startWatching(onChanged: (info: { added: number; missing: number
           schedule(onChanged)
         }
       )
-      watcher.on('error', () => undefined)
+      watcher.on('error', (error) => {
+        void log.warn('watcher', '目录监听出错，该目录将不再自动同步', {
+          path: source.path,
+          error: String(error)
+        })
+      })
       watchers.push(watcher)
-    } catch {
-      // 个别目录不支持递归监听，跳过即可
+    } catch (error) {
+      // 个别目录不支持递归监听，跳过即可，但要让用户知道是哪个目录
+      void log.warn('watcher', '无法监听目录', { path: source.path, error: (error as Error).message })
     }
   }
 }
@@ -100,7 +108,8 @@ async function flush(onChanged: (info: { added: number; missing: number }) => vo
   let added = 0
   if (adds.length) {
     try {
-      const result = await importPaths(adds, () => undefined, false)
+      // 外部新增的文件也沿用用户上次的导入选项
+      const result = await importPaths(adds, () => undefined, false, getImportOptions())
       added = result.added + result.relinked
     } catch {
       /* 单个文件失败不影响其它事件 */

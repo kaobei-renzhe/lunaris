@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "node16",
+    "moduleResolution": "node16",
+    "noEmit": false,
+    "outDir": ".cache/bench/js",
+    "rootDir": ".",
+    "isolatedModules": false,
+    "sourceMap": false
+  },
+  "include": ["src/main/**/*.ts", "src/shared/**/*.ts", "scripts/bench/entry-*.ts"]
+}

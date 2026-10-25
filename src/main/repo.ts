@@ -1,14 +1,16 @@
-import { join } from 'node:path'
+import { basename, dirname, join, sep } from 'node:path'
 import { existsSync, unlinkSync } from 'node:fs'
 import type { Database } from 'better-sqlite3'
-import { getDb, getLibraryPath } from './db'
+import { getDb, getIndexPath, getLibraryPath } from './db'
 import { RAW_EXT } from '../shared/formats'
 import type {
   DuplicateGroup,
   ExifData,
   FilterState,
   Folder,
+  ImportDirNode,
   Item,
+  ItemQuality,
   SmartFolder,
   Stats,
   Tag
@@ -38,16 +40,18 @@ interface ItemRow {
   burst_key: string | null
   stack_id: number | null
   stack_cover: number
+  dir: string | null
+  error: string | null
 }
 
 export function thumbPathFor(id: number, small = false): string {
   const bucket = String(id % 100).padStart(2, '0')
-  return join(getLibraryPath(), 'thumbnails', bucket, `${id}${small ? '_s' : ''}.webp`)
+  return join(getIndexPath(), 'thumbnails', bucket, `${id}${small ? '_s' : ''}.webp`)
 }
 
 export function previewPathFor(id: number): string {
   const bucket = String(id % 100).padStart(2, '0')
-  return join(getLibraryPath(), 'previews', bucket, `${id}.jpg`)
+  return join(getIndexPath(), 'previews', bucket, `${id}.jpg`)
 }
 
 function parseJson<T>(value: string | null): T | null {
@@ -104,11 +108,48 @@ function loadFoldersFor(db: Database, ids: number[]): Map<number, number[]> {
   return map
 }
 
+function loadQualitiesFor(db: Database, ids: number[]): Map<number, ItemQuality> {
+  const map = new Map<number, ItemQuality>()
+  if (ids.length === 0) return map
+  for (const part of chunk(ids, 400)) {
+    const rows = db
+      .prepare(
+        `SELECT item_id, composition, exposure, color, sharpness, overall, comment, model, updated_at
+         FROM quality_scores WHERE item_id IN (${part.map(() => '?').join(',')})`
+      )
+      .all(...part) as Array<{
+      item_id: number
+      composition: number
+      exposure: number
+      color: number
+      sharpness: number
+      overall: number
+      comment: string
+      model: string
+      updated_at: number
+    }>
+    for (const r of rows) {
+      map.set(r.item_id, {
+        composition: r.composition,
+        exposure: r.exposure,
+        color: r.color,
+        sharpness: r.sharpness,
+        overall: r.overall,
+        comment: r.comment,
+        model: r.model,
+        updatedAt: r.updated_at
+      })
+    }
+  }
+  return map
+}
+
 function mapItems(rows: ItemRow[]): Item[] {
   const db = getDb()
   const ids = rows.map((r) => r.id)
   const tagMap = loadTagsFor(db, ids)
   const folderMap = loadFoldersFor(db, ids)
+  const qualityMap = loadQualitiesFor(db, ids)
   const { pairCounts, burstCounts, stackCounts } = loadGroupCounts(db, rows)
   return rows.map((r) => ({
     id: r.id,
@@ -138,8 +179,10 @@ function mapItems(rows: ItemRow[]): Item[] {
     palette: parseJson<string[]>(r.palette) ?? [],
     exif: parseJson<ExifData>(r.exif),
     missing: r.missing,
+    error: r.error ?? null,
     tags: tagMap.get(r.id) ?? [],
-    folderIds: folderMap.get(r.id) ?? []
+    folderIds: folderMap.get(r.id) ?? [],
+    quality: qualityMap.get(r.id) ?? null
   }))
 }
 
@@ -203,33 +246,40 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
     .map((key) => Number(key.slice(1)))
     .filter((value) => Number.isFinite(value))
 
-  if (filter.missing) {
-    // 丢失视图不折叠分组，逐张展示才方便重新定位
-    where.push('i.missing = 1')
+  if (filter.errors) {
+    // 异常视图：把导入失败的文件集中列出来，方便重新处理
+    where.push('i.error IS NOT NULL')
   } else {
-    where.push('i.missing = 0', '(i.pair_key IS NULL OR i.pair_cover = 1)')
+    where.push('i.error IS NULL')
 
-    if (expandedStacks.length) {
-      where.push(
-        `(i.stack_id IS NULL OR i.stack_cover = 1 OR i.stack_id IN (${expandedStacks
-          .map(() => '?')
-          .join(',')}))`
-      )
-      params.push(...expandedStacks)
+    if (filter.missing) {
+      // 丢失视图不折叠分组，逐张展示才方便重新定位
+      where.push('i.missing = 1')
     } else {
-      where.push('(i.stack_id IS NULL OR i.stack_cover = 1)')
-    }
+      where.push('i.missing = 0', '(i.pair_key IS NULL OR i.pair_cover = 1)')
 
-    if (!filter.expandBursts) {
-      if (expandedBursts.length) {
+      if (expandedStacks.length) {
         where.push(
-          `(i.burst_key IS NULL OR i.burst_cover = 1 OR i.burst_key IN (${expandedBursts
+          `(i.stack_id IS NULL OR i.stack_cover = 1 OR i.stack_id IN (${expandedStacks
             .map(() => '?')
             .join(',')}))`
         )
-        params.push(...expandedBursts)
+        params.push(...expandedStacks)
       } else {
-        where.push('(i.burst_key IS NULL OR i.burst_cover = 1)')
+        where.push('(i.stack_id IS NULL OR i.stack_cover = 1)')
+      }
+
+      if (!filter.expandBursts) {
+        if (expandedBursts.length) {
+          where.push(
+            `(i.burst_key IS NULL OR i.burst_cover = 1 OR i.burst_key IN (${expandedBursts
+              .map(() => '?')
+              .join(',')}))`
+          )
+          params.push(...expandedBursts)
+        } else {
+          where.push('(i.burst_key IS NULL OR i.burst_cover = 1)')
+        }
       }
     }
   }
@@ -242,6 +292,17 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
     where.push('i.rating >= ?')
     params.push(filter.minRating)
   }
+  if (filter.minAiScore && filter.minAiScore > 0) {
+    where.push('EXISTS (SELECT 1 FROM quality_scores qs WHERE qs.item_id = i.id AND qs.overall >= ?)')
+    params.push(filter.minAiScore)
+  }
+  if (filter.unscored) {
+    where.push('NOT EXISTS (SELECT 1 FROM quality_scores qs WHERE qs.item_id = i.id)')
+  }
+  if (filter.onlyIds && filter.onlyIds.length > 0) {
+    where.push(`i.id IN (${filter.onlyIds.map(() => '?').join(',')})`)
+    params.push(...filter.onlyIds)
+  }
   if (filter.colorFamily) {
     where.push('i.color_family = ?')
     params.push(filter.colorFamily)
@@ -253,6 +314,14 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
   if (filter.folderId) {
     where.push('EXISTS (SELECT 1 FROM item_folders f WHERE f.item_id = i.id AND f.folder_id = ?)')
     params.push(filter.folderId)
+  }
+
+  if (filter.dir) {
+    // 目录筛选包含子目录；用 instr 做前缀匹配，避开 Windows 路径的 LIKE 转义
+    where.push(
+      "(lower(i.dir) = lower(?) OR instr(lower(i.dir), lower(?)) = 1)"
+    )
+    params.push(filter.dir, filter.dir.endsWith(sep) ? filter.dir : `${filter.dir}${sep}`)
   }
 
   for (const tagId of filter.tagIds ?? []) {
@@ -298,7 +367,9 @@ export function listItems(
     name: 'i.name COLLATE NOCASE ASC',
     mtime: 'i.mtime DESC',
     rating: 'i.rating DESC, i.added_at DESC',
-    size: 'i.size DESC'
+    size: 'i.size DESC',
+    // 没评过分的排在最后，避免空值把高分图挤下去
+    ai: 'coalesce((SELECT qs.overall FROM quality_scores qs WHERE qs.item_id = i.id), -1) DESC, i.added_at DESC'
   }
   const order = orderMap[filter.sort ?? 'added'] ?? orderMap.added
 
@@ -405,6 +476,58 @@ export function updateItem(
 }
 
 /**
+ * 保存大模型评分：同一张图重复评分只保留最新的一份。
+ * 返回真正写入的条数（失败的图不会走到这里）。
+ */
+export function saveQualityScores(
+  scores: Array<{
+    itemId: number
+    composition: number
+    exposure: number
+    color: number
+    sharpness: number
+    overall: number
+    comment: string
+  }>,
+  model: string
+): number {
+  if (scores.length === 0) return 0
+  const db = getDb()
+  const stmt = db.prepare(
+    `INSERT INTO quality_scores
+       (item_id, composition, exposure, color, sharpness, overall, comment, model, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(item_id) DO UPDATE SET
+       composition = excluded.composition,
+       exposure = excluded.exposure,
+       color = excluded.color,
+       sharpness = excluded.sharpness,
+       overall = excluded.overall,
+       comment = excluded.comment,
+       model = excluded.model,
+       updated_at = excluded.updated_at`
+  )
+  const now = Date.now()
+  const tx = db.transaction((list: typeof scores) => {
+    for (const score of list) {
+      stmt.run(
+        score.itemId,
+        score.composition,
+        score.exposure,
+        score.color,
+        score.sharpness,
+        score.overall,
+        score.comment.slice(0, 300),
+        model.slice(0, 80),
+        now
+      )
+    }
+  })
+  tx(scores)
+  return scores.length
+}
+
+/**
  * 移入回收站（软删除）：记录和缩略图都保留，方便 Ctrl+Z 撤销。
  */
 export function trashItems(ids: number[]): void {
@@ -435,6 +558,7 @@ export function purgeItems(ids: number[]): void {
   const delFolders = db.prepare('DELETE FROM item_folders WHERE item_id = ?')
   const delVectors = db.prepare('DELETE FROM embeddings WHERE item_id = ?')
   const delAutoTags = db.prepare('DELETE FROM auto_tags WHERE item_id = ?')
+  const delScores = db.prepare('DELETE FROM quality_scores WHERE item_id = ?')
   const tx = db.transaction((list: number[]) => {
     for (const id of list) {
       del.run(id)
@@ -442,6 +566,7 @@ export function purgeItems(ids: number[]): void {
       delFolders.run(id)
       delVectors.run(id)
       delAutoTags.run(id)
+      delScores.run(id)
       for (const p of [thumbPathFor(id), thumbPathFor(id, true), previewPathFor(id)]) {
         try {
           if (existsSync(p)) unlinkSync(p)
@@ -452,6 +577,25 @@ export function purgeItems(ids: number[]): void {
     }
   })
   tx(ids)
+}
+
+/**
+ * 损坏/无法识别的文件不删记录，只打上错误标记，
+ * 这样导入不会中断，事后还能在「导入异常」里看到它们。
+ */
+export function markItemError(id: number, message: string): void {
+  const db = getDb()
+  db.prepare('UPDATE items SET error = ?, width = 0, height = 0 WHERE id = ?').run(
+    message.slice(0, 300),
+    id
+  )
+  for (const p of [thumbPathFor(id), thumbPathFor(id, true), previewPathFor(id)]) {
+    try {
+      if (existsSync(p)) unlinkSync(p)
+    } catch {
+      /* 半成品缩略图清理失败忽略 */
+    }
+  }
 }
 
 export interface Source {
@@ -545,9 +689,10 @@ export function findMissingMatch(name: string, size: number): { id: number; path
 
 export function relinkItem(id: number, path: string, name: string, ext: string): boolean {
   try {
+    // 目录也要跟着更新，否则「源目录」树和目录筛选还停在旧位置
     getDb()
-      .prepare('UPDATE items SET path = ?, name = ?, ext = ?, missing = 0 WHERE id = ?')
-      .run(path, name, ext, id)
+      .prepare('UPDATE items SET path = ?, name = ?, ext = ?, dir = ?, missing = 0 WHERE id = ?')
+      .run(path, name, ext, dirname(path), id)
     return true
   } catch {
     // 新路径已被别的记录占用
@@ -586,8 +731,8 @@ export function stats(): Stats {
   const row = db
     .prepare(
       `SELECT
-         coalesce(SUM(CASE WHEN missing = 0 THEN 1 ELSE 0 END), 0) AS total,
-         coalesce(SUM(CASE WHEN missing = 0 THEN size ELSE 0 END), 0) AS bytes
+         coalesce(SUM(CASE WHEN missing = 0 AND error IS NULL THEN 1 ELSE 0 END), 0) AS total,
+         coalesce(SUM(CASE WHEN missing = 0 AND error IS NULL THEN size ELSE 0 END), 0) AS bytes
        FROM items
        WHERE trashed = 0
          AND (pair_key IS NULL OR pair_cover = 1)
@@ -601,9 +746,143 @@ export function stats(): Stats {
       c: number
     }
   ).c
+  const errors = (
+    db.prepare('SELECT COUNT(*) AS c FROM items WHERE trashed = 0 AND error IS NOT NULL').get() as {
+      c: number
+    }
+  ).c
   const tags = (db.prepare('SELECT COUNT(*) AS c FROM tags').get() as { c: number }).c
   const folders = (db.prepare('SELECT COUNT(*) AS c FROM folders').get() as { c: number }).c
-  return { total: row.total, missing, bytes: row.bytes, tags, folders }
+  return { total: row.total, missing, bytes: row.bytes, tags, folders, errors }
+}
+
+interface DirBucket {
+  path: string
+  name: string
+  count: number
+  children: Map<string, DirBucket>
+}
+
+/**
+ * 媒体库的源目录树：优先以图库目录为根，按原始层级组织；
+ * 图库之外导入的目录单独成根。这样不会出现一长串「绝对路径」平铺。
+ */
+export function listDirTree(): ImportDirNode[] {
+  const db = getDb()
+  const rows = db
+    .prepare(
+      `SELECT dir, COUNT(*) AS c FROM items
+       WHERE trashed = 0 AND missing = 0 AND error IS NULL AND dir IS NOT NULL AND dir <> ''
+       GROUP BY dir`
+    )
+    .all() as Array<{ dir: string; c: number }>
+  if (rows.length === 0) return []
+
+  const sources = listSources()
+    .map((source) => source.path.replace(/[\\/]+$/, ''))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+  const library = getLibraryPath().replace(/[\\/]+$/, '')
+
+  const roots = new Map<string, DirBucket>()
+  const ensure = (nodePath: string, nodeName: string): DirBucket => {
+    const found = roots.get(nodePath.toLowerCase())
+    if (found) return found
+    const created: DirBucket = {
+      path: nodePath,
+      name: nodeName || nodePath,
+      count: 0,
+      children: new Map()
+    }
+    roots.set(nodePath.toLowerCase(), created)
+    return created
+  }
+
+  const isInside = (child: string, parent: string): boolean => {
+    const c = child.toLowerCase()
+    const p = parent.toLowerCase()
+    return c === p || c.startsWith(`${p}${sep}`)
+  }
+
+  const addUnder = (rootPath: string, rootName: string, dir: string, count: number): void => {
+    let node = ensure(rootPath, rootName)
+    const rest = dir.slice(rootPath.length).split(sep).filter(Boolean)
+    let currentPath = rootPath
+    for (const segment of rest) {
+      currentPath = currentPath.endsWith(sep)
+        ? `${currentPath}${segment}`
+        : `${currentPath}${sep}${segment}`
+      const key = currentPath.toLowerCase()
+      let child = node.children.get(key)
+      if (!child) {
+        child = { path: currentPath, name: segment, count: 0, children: new Map() }
+        node.children.set(key, child)
+      }
+      node = child
+    }
+    node.count += count
+  }
+
+  const unmatched: Array<{ dir: string; count: number }> = []
+  for (const row of rows) {
+    const dir = row.dir
+    const lower = dir.toLowerCase()
+    const source = sources.find(
+      (entry) =>
+        lower === entry.toLowerCase() || lower.startsWith(`${entry.toLowerCase()}${sep}`)
+    )
+
+    if (library && isInside(dir, library)) {
+      addUnder(library, basename(library) || library, dir, row.c)
+    } else if (source) {
+      addUnder(source, basename(source) || source, dir, row.c)
+    } else {
+      // 既不在图库内、也没有登记来源：等所有行处理完，用公共父目录统一成树
+      unmatched.push({ dir, count: row.c })
+    }
+  }
+
+  if (unmatched.length > 0) {
+    const ancestor = commonAncestor(unmatched.map((item) => item.dir))
+    const name = basename(ancestor) || ancestor
+    for (const item of unmatched) addUnder(ancestor, name, item.dir, item.count)
+  }
+
+  const finalize = (node: DirBucket): ImportDirNode => {
+    const children = [...node.children.values()]
+      .map(finalize)
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+    return {
+      path: node.path,
+      name: node.name,
+      count: node.count,
+      total: node.count + children.reduce((sum, child) => sum + child.total, 0),
+      children
+    }
+  }
+
+  return [...roots.values()]
+    .map(finalize)
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+}
+
+/** 多个目录的最深公共父目录，用来给「找不到来源」的图片兜底成树 */
+function commonAncestor(dirs: string[]): string {
+  if (dirs.length === 0) return ''
+  if (dirs.length === 1) return dirs[0]
+  const split = dirs.map((dir) => dir.split(sep).filter(Boolean))
+  const first = split[0]
+  let length = 0
+  while (
+    length < first.length &&
+    split.every((parts) => (parts[length] ?? '').toLowerCase() === first[length].toLowerCase())
+  ) {
+    length++
+  }
+  const prefix = first.slice(0, length).join(sep)
+  if (!prefix) return dirs[0]
+  // 盘符根（E:）要补一个分隔符，避免后续拼接成 E:照片
+  return /^[a-zA-Z]:$/.test(prefix) ? `${prefix}${sep}` : prefix
 }
 
 export function listTags(): Tag[] {
@@ -793,7 +1072,7 @@ export function findDuplicates(): DuplicateGroup[] {
   const rows = getDb()
     .prepare(
       `SELECT id, hash FROM items
-       WHERE hash IS NOT NULL AND hash <> '' AND trashed = 0 AND missing = 0
+       WHERE hash IS NOT NULL AND hash <> '' AND trashed = 0 AND missing = 0 AND error IS NULL
        ORDER BY id`
     )
     .all() as Array<{ id: number; hash: string }>

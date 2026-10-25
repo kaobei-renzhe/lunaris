@@ -4,12 +4,12 @@ import {
   Aperture,
   Boxes,
   Camera,
-  ChevronRight,
   Copy,
   Lightbulb,
   Package,
   Pencil,
   Plus,
+  Search,
   Sparkles,
   Trash2,
   Video,
@@ -23,10 +23,12 @@ import type {
   GearPlan,
   GearRecommendation,
   GearSpec,
+  GearSuggestion,
   GearUsage,
   ScenarioId,
   ScenarioOption
 } from '@shared/types'
+import GearSearch from './GearSearch'
 
 interface EquipmentDialogProps {
   onClose: () => void
@@ -96,11 +98,12 @@ function specSummary(item: GearSpec): string {
 export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
   const [tab, setTab] = useState<'gear' | 'plan'>('gear')
   const [items, setItems] = useState<GearItem[]>([])
-  const [catalog, setCatalog] = useState<GearSpec[]>([])
+  const [suggestions, setSuggestions] = useState<GearSuggestion[]>([])
   const [scenarios, setScenarios] = useState<ScenarioOption[]>([])
   const [filter, setFilter] = useState<'all' | GearCategory>('all')
+  const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<(GearSpec & { id?: string }) | null>(null)
-  const [showCatalog, setShowCatalog] = useState(false)
+  const [picker, setPicker] = useState<{ mode: 'add' | 'replace'; item?: GearItem } | null>(null)
   const [scenario, setScenario] = useState<ScenarioId>('portrait')
   const [recommendation, setRecommendation] = useState<GearRecommendation | null>(null)
   const [usage, setUsage] = useState<GearUsage | null>(null)
@@ -134,14 +137,14 @@ export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
   useEffect(() => {
     void Promise.all([
       window.api.listGear(),
-      window.api.gearCatalog(),
+      window.api.gearSuggestions(),
       window.api.gearScenarios(),
       window.api.gearUsage(),
       window.api.listKits()
     ])
-      .then(([list, catalogList, scenarioList, usageInfo, kitList]) => {
+      .then(([list, suggestionList, scenarioList, usageInfo, kitList]) => {
         setItems(list)
-        setCatalog(catalogList)
+        setSuggestions(suggestionList)
         setScenarios(scenarioList)
         setUsage(usageInfo)
         setKits(kitList)
@@ -153,15 +156,31 @@ export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
     if (tab === 'plan') void runRecommend(scenario)
   }, [tab, scenario, runRecommend])
 
-  const quickAdd = async (spec: GearSpec): Promise<void> => {
+  const applyPick = async (spec: GearSpec): Promise<void> => {
     setError('')
     try {
-      await window.api.saveGear(spec)
+      if (picker?.mode === 'replace' && picker.item) {
+        // 换型号只覆盖参数，备注这类个人信息保留
+        await window.api.saveGear({ ...spec, id: picker.item.id, note: picker.item.note })
+      } else {
+        await window.api.saveGear(spec)
+      }
+      setPicker(null)
       await refresh()
       if (tab === 'plan') await runRecommend(scenario)
     } catch (err) {
       setError((err as Error).message)
     }
+  }
+
+  const openManual = (query: string): void => {
+    const base =
+      picker?.mode === 'replace' && picker.item
+        ? { ...picker.item }
+        : emptyForm(filter === 'all' ? 'body' : filter)
+    if (query) base.model = query
+    setPicker(null)
+    setEditing(base)
   }
 
   const remove = async (item: GearItem): Promise<void> => {
@@ -192,9 +211,11 @@ export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
     }
   }
 
-  const visibleItems = filter === 'all' ? items : items.filter((item) => item.category === filter)
-  const catalogItems =
-    filter === 'all' ? catalog : catalog.filter((item) => item.category === filter)
+  const keyword = search.trim().toLowerCase()
+  const matched = keyword
+    ? items.filter((item) => `${item.brand} ${item.model}`.toLowerCase().includes(keyword))
+    : items
+  const visibleItems = filter === 'all' ? matched : matched.filter((item) => item.category === filter)
   const currentScenario = scenarios.find((item) => item.id === scenario)
 
   const scenarioName = (id: ScenarioId): string =>
@@ -326,6 +347,35 @@ export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
                     {usage.matched < usage.total ? '（其余没对上的会显示为未匹配）' : ''}
                   </div>
                 )}
+
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="relative flex-1 max-w-[320px]">
+                    <Search
+                      size={13}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--faint)] pointer-events-none"
+                    />
+                    <input
+                      className="input w-full h-7 pl-8 text-[12px]"
+                      placeholder="搜索我的设备…"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </div>
+                  <button
+                    className="btn btn-primary h-7 px-3 text-[11.5px]"
+                    onClick={() => setPicker({ mode: 'add' })}
+                  >
+                    <Plus size={12} /> 搜索添加
+                  </button>
+                  <button
+                    className="btn btn-ghost h-7 px-2 text-[11.5px]"
+                    onClick={() => openManual('')}
+                    title="型号不在目录里时，手动录入参数"
+                  >
+                    手动录入
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-1.5 mb-3 flex-wrap">
                   <FilterChip active={filter === 'all'} onClick={() => setFilter('all')}>
                     全部 {items.length}
@@ -342,22 +392,18 @@ export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
                       </FilterChip>
                     )
                   })}
-                  <button
-                    className="btn btn-primary h-7 px-3 text-[11.5px] ml-auto"
-                    onClick={() => setEditing(emptyForm(filter === 'all' ? 'body' : filter))}
-                  >
-                    <Plus size={12} /> 添加设备
-                  </button>
                 </div>
 
                 {visibleItems.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-[var(--border)] py-10 text-center">
-                    <div className="text-[12.5px] text-[var(--muted)]">还没有这类设备</div>
+                    <div className="text-[12.5px] text-[var(--muted)]">
+                      {keyword ? '没有匹配的设备' : '还没有这类设备'}
+                    </div>
                     <button
                       className="btn mt-3 h-7 px-3 text-[11.5px]"
-                      onClick={() => setShowCatalog(true)}
+                      onClick={() => setPicker({ mode: 'add' })}
                     >
-                      从常见清单快速添加
+                      搜索型号添加
                     </button>
                   </div>
                 ) : (
@@ -386,8 +432,8 @@ export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
                             )}
                             <button
                               className="btn btn-ghost h-6 px-1.5"
-                              title="编辑"
-                              onClick={() => setEditing({ ...item })}
+                              title="更换型号（搜索）"
+                              onClick={() => setPicker({ mode: 'replace', item })}
                             >
                               <Pencil size={12} />
                             </button>
@@ -404,38 +450,6 @@ export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
                     })}
                   </div>
                 )}
-
-                <div className="mt-4">
-                  <button
-                    className="btn btn-ghost h-7 px-2 text-[11.5px]"
-                    onClick={() => setShowCatalog((value) => !value)}
-                  >
-                    {showCatalog ? '收起常见清单' : '从常见清单快速添加'}
-                    <ChevronRight
-                      size={12}
-                      style={{ transform: showCatalog ? 'rotate(90deg)' : undefined }}
-                    />
-                  </button>
-                  {showCatalog && (
-                    <div className="mt-2 grid grid-cols-2 gap-1.5 max-h-[240px] overflow-y-auto pr-1">
-                      {catalogItems.map((spec) => (
-                        <button
-                          key={`${spec.category}-${spec.model}`}
-                          className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-2.5 py-1.5 text-left hover:border-[var(--accent)]"
-                          onClick={() => void quickAdd(spec)}
-                        >
-                          <span className="text-[10px] text-[var(--faint)] w-[42px] shrink-0">
-                            {CATEGORY_LABEL[spec.category]}
-                          </span>
-                          <span className="text-[11.5px] text-[var(--text)] truncate">
-                            {spec.brand} {spec.model}
-                          </span>
-                          <Plus size={12} className="ml-auto shrink-0 text-[var(--faint)]" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </>
             ))}
 
@@ -662,6 +676,19 @@ export default function EquipmentDialog({ onClose }: EquipmentDialogProps) {
             </>
           )}
         </div>
+
+        {picker && (
+          <GearSearch
+            mode={picker.mode}
+            current={picker.item}
+            suggestions={suggestions}
+            items={items}
+            defaultCategory={picker.item?.category ?? (filter === 'all' ? 'all' : filter)}
+            onPick={(spec) => void applyPick(spec)}
+            onManual={openManual}
+            onClose={() => setPicker(null)}
+          />
+        )}
       </div>
     </div>
   )

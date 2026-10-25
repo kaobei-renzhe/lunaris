@@ -1,5 +1,18 @@
 import { useState } from 'react'
-import { FolderPlus, Layers, Save, Search, Sparkles, Star, Trash2, X } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  Folder as FolderIcon,
+  FolderPlus,
+  Layers,
+  Save,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Star,
+  Trash2,
+  X
+} from 'lucide-react'
 import type { ClipStatus, FilterState, Folder } from '@shared/types'
 import { COLOR_OPTIONS } from '../lib/format'
 
@@ -15,6 +28,17 @@ interface ToolbarProps {
   onRateSelected: (rating: number) => void
   onFlagSelected: (flag: number) => void
   onStackSelected: () => void
+  onScoreSelected: () => void
+  aiScoring: boolean
+  /** AI 智能筛选用到的自然语言规则（仅用于显示 chip） */
+  aiRule: string | null
+  onOpenSmartFilter: () => void
+  onClearAi: () => void
+  /** 大模型总开关是否就绪；没就绪时相册里不出现任何 AI 入口 */
+  aiReady: boolean
+  /** 能力级开关：只有总开关就绪且该能力开启时才渲染入口 */
+  canScore: boolean
+  canSmartFilter: boolean
   semanticMode: boolean
   clipStatus: ClipStatus | null
   onToggleSemantic: () => void
@@ -36,6 +60,14 @@ export default function Toolbar({
   onRateSelected,
   onFlagSelected,
   onStackSelected,
+  onScoreSelected,
+  aiScoring,
+  aiRule,
+  onOpenSmartFilter,
+  onClearAi,
+  aiReady,
+  canScore,
+  canSmartFilter,
   semanticMode,
   clipStatus,
   onToggleSemantic,
@@ -46,17 +78,42 @@ export default function Toolbar({
 }: ToolbarProps) {
   const [saving, setSaving] = useState(false)
   const [smartName, setSmartName] = useState('')
+  /** 第二排筛选条件可以折叠，给图库让出高度 */
+  const [filtersOpen, setFiltersOpen] = useState(true)
 
   const patch = (next: Partial<FilterState>): void => onFilter({ ...filter, ...next })
   const hasFilter =
     Boolean(filter.query) ||
     Boolean(filter.folderId) ||
+    Boolean(filter.dir) ||
+    Boolean(filter.errors) ||
     (filter.tagIds?.length ?? 0) > 0 ||
     Boolean(filter.colorFamily) ||
     Boolean(filter.orientation) ||
     Boolean(filter.flag) ||
     Boolean(filter.missing) ||
-    (filter.minRating ?? 0) > 0
+    (filter.minRating ?? 0) > 0 ||
+    (filter.minAiScore ?? 0) > 0 ||
+    Boolean(filter.unscored) ||
+    (filter.onlyIds?.length ?? 0) > 0
+
+  /** 折叠后用它提示还有几个条件在生效 */
+  const activeCount = [
+    filter.query,
+    filter.folderId,
+    filter.dir,
+    filter.errors,
+    filter.colorFamily,
+    filter.orientation,
+    filter.flag,
+    filter.expandBursts,
+    filter.missing,
+    (filter.minRating ?? 0) > 0,
+    (filter.minAiScore ?? 0) > 0,
+    filter.unscored,
+    (filter.onlyIds?.length ?? 0) > 0,
+    (filter.tagIds?.length ?? 0) > 0
+  ].filter(Boolean).length
 
   const commitSmart = (): void => {
     if (smartName.trim()) onSaveSmart(smartName.trim())
@@ -103,6 +160,20 @@ export default function Toolbar({
           )}
         </button>
 
+        <button
+          className={`btn h-8 px-2.5 shrink-0 ${
+            !filtersOpen && activeCount > 0 ? 'border-[var(--accent-border)] text-[var(--accent-2)]' : ''
+          }`}
+          onClick={() => setFiltersOpen((open) => !open)}
+          title={filtersOpen ? '折叠筛选条件' : '展开筛选条件'}
+        >
+          <SlidersHorizontal size={13} /> 筛选
+          {activeCount > 0 && (
+            <span className="ml-0.5 text-[10.5px] text-[var(--faint)] tabular-nums">{activeCount}</span>
+          )}
+          {filtersOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+
         <select
           className="input"
           value={filter.sort ?? 'added'}
@@ -113,6 +184,7 @@ export default function Toolbar({
           <option value="name">名称</option>
           <option value="rating">评分</option>
           <option value="size">文件大小</option>
+          {aiReady && canScore && <option value="ai">AI 评分</option>}
         </select>
 
         <div className="ml-auto flex items-center gap-2">
@@ -134,7 +206,7 @@ export default function Toolbar({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mt-2 flex-wrap">
+      <div className={`flex items-center gap-2 mt-2 flex-wrap ${filtersOpen ? '' : 'hidden'}`}>
         <select
           className="input h-7 text-[12px]"
           value={filter.minRating ?? 0}
@@ -147,6 +219,26 @@ export default function Toolbar({
           <option value={4}>4 星以上</option>
           <option value={5}>5 星</option>
         </select>
+
+        {aiReady && canScore && (
+          <select
+            className="input h-7 text-[12px]"
+            value={filter.unscored ? 'unscored' : String(filter.minAiScore ?? 0)}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value === 'unscored') patch({ unscored: true, minAiScore: 0 })
+              else patch({ unscored: false, minAiScore: Number(value) })
+            }}
+            title="按大模型质量评分筛选"
+          >
+            <option value="0">全部 AI 评分</option>
+            <option value="60">AI ≥ 60</option>
+            <option value="70">AI ≥ 70</option>
+            <option value="80">AI ≥ 80</option>
+            <option value="90">AI ≥ 90</option>
+            <option value="unscored">未评分</option>
+          </select>
+        )}
 
         <select
           className="input h-7 text-[12px]"
@@ -168,6 +260,18 @@ export default function Toolbar({
           <option value={1}>✓ 留用</option>
           <option value={-1}>✕ 淘汰</option>
         </select>
+
+        {aiReady && canSmartFilter && (
+          <button
+            className={`btn h-7 px-2 text-[11.5px] ${
+              aiRule ? 'border-[var(--accent)] text-[var(--accent-2)]' : ''
+            }`}
+            onClick={onOpenSmartFilter}
+            title="用一句话描述要挑哪些图，让大模型帮你筛（会消耗 token）"
+          >
+            <Sparkles size={12} /> AI 筛选
+          </button>
+        )}
 
         <button
           className={`btn h-7 px-2 text-[11.5px] ${
@@ -199,22 +303,62 @@ export default function Toolbar({
           })}
         </div>
 
+        {filter.dir && (
+          <button
+            className="btn h-7 px-2 text-[11.5px] max-w-[260px]"
+            onClick={() => patch({ dir: null })}
+            title={filter.dir}
+          >
+            <FolderIcon size={12} />
+            <span className="truncate">{filter.dir.split(/[\\/]/).filter(Boolean).pop()}</span>
+            <X size={11} />
+          </button>
+        )}
+
+        {aiRule && (
+          <button
+            className="btn h-7 px-2 text-[11.5px] max-w-[260px] border-[var(--accent-border)] text-[var(--accent-2)]"
+            onClick={onClearAi}
+            title={`AI 筛选：${aiRule}（点击取消）`}
+          >
+            <Sparkles size={11} />
+            <span className="truncate">{aiRule}</span>
+            <X size={11} />
+          </button>
+        )}
+
+        {filter.errors && (
+          <button
+            className="btn h-7 px-2 text-[11.5px] border-[var(--danger-border)] text-[var(--danger-text)]"
+            onClick={() => patch({ errors: false })}
+          >
+            导入异常
+            <X size={11} />
+          </button>
+        )}
+
         {hasFilter && (
           <button
             className="btn btn-ghost h-7 px-2 text-[11.5px]"
-            onClick={() =>
+            onClick={() => {
+              onClearAi()
               onFilter({
                 sort: filter.sort,
                 query: '',
                 folderId: null,
+                dir: null,
                 tagIds: [],
                 colorFamily: null,
                 orientation: null,
                 minRating: 0,
+                minAiScore: 0,
+                unscored: false,
+                onlyIds: [],
                 flag: 0,
-                missing: false
+                missing: false,
+                errors: false
               })
-            }
+            }}
           >
             <X size={12} /> 清除筛选
           </button>
@@ -312,6 +456,16 @@ export default function Toolbar({
             </button>
           </div>
           <div className="ml-auto flex items-center gap-1">
+            {aiReady && canScore && (
+              <button
+                className="btn btn-ghost h-6 px-2 text-[11.5px]"
+                disabled={aiScoring}
+                onClick={onScoreSelected}
+                title="用大模型给选中的图评分（一次最多 12 张），结果会存进图库，每次都会消耗 token"
+              >
+                <Sparkles size={12} /> {aiScoring ? '评分中…' : 'AI 评分'}
+              </button>
+            )}
             {selectedIds.length >= 2 && (
               <button
                 className="btn btn-ghost h-6 px-2 text-[11.5px]"

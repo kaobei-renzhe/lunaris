@@ -1,3 +1,6 @@
+import type { SkinId } from './skins'
+import type { LlmConfig, LlmRunOutcome, LlmStatus, LlmTestResult, PhotoQualitySaved } from './llm'
+
 export interface ExifData {
   camera?: string
   lens?: string
@@ -40,6 +43,8 @@ export interface FilterState {
   query?: string
   tagIds?: number[]
   folderId?: number | null
+  /** 按源目录筛选（含子目录） */
+  dir?: string | null
   minRating?: number
   colorFamily?: ColorFamily | null
   orientation?: Orientation | null
@@ -47,7 +52,15 @@ export interface FilterState {
   expandBursts?: boolean
   expandedGroups?: string[]
   missing?: boolean
-  sort?: 'added' | 'name' | 'mtime' | 'rating' | 'size'
+  /** 只看导入失败的异常文件 */
+  errors?: boolean
+  /** 大模型评分下限（0-100），0 或不填表示不限 */
+  minAiScore?: number
+  /** 只看还没被大模型评过分的 */
+  unscored?: boolean
+  /** 只保留这些 id（AI 智能筛选的结果），空数组等于不限制 */
+  onlyIds?: number[]
+  sort?: 'added' | 'name' | 'mtime' | 'rating' | 'size' | 'ai'
 }
 
 export interface RelocatePair {
@@ -153,10 +166,31 @@ export interface GearRecommendation {
   missing: string[]
 }
 
+/** 从照片 EXIF 里发现的器材，可直接一键加入装备 */
+export interface GearSuggestion extends GearSpec {
+  /** 库中有多少张照片用到这件器材 */
+  count: number
+  /** 是否来自内置目录（false 表示仅从 EXIF 推断，参数可能不全） */
+  catalogued: boolean
+}
+
 export interface ScenarioOption {
   id: ScenarioId
   name: string
   hint: string
+}
+
+/** 大模型质量评分（已落库的那份） */
+export interface ItemQuality {
+  composition: number
+  exposure: number
+  color: number
+  sharpness: number
+  overall: number
+  comment: string
+  /** 产生这份评分的模型名，便于换模型后判断结果是否过时 */
+  model: string
+  updatedAt: number
 }
 
 export interface Item {
@@ -183,8 +217,30 @@ export interface Item {
   palette: string[]
   exif: ExifData | null
   missing: number
+  /** 导入失败的原因，null 表示正常 */
+  error: string | null
   tags: Tag[]
   folderIds: number[]
+  /** 大模型评分，没评过为 null */
+  quality: ItemQuality | null
+}
+
+/** 索引（library.db / 缩略图 / 预览）当前存放位置 */
+export interface LibraryStorage {
+  library: string
+  indexDir: string
+}
+
+/** 移动索引位置的结果（失败不抛异常，走 message） */
+export interface IndexMoveResult {
+  ok: boolean
+  indexDir?: string
+  /** 复制过去的文件数 */
+  files?: number
+  /** 旧位置是否清理干净 */
+  cleaned?: boolean
+  message?: string
+  cancelled?: boolean
 }
 
 export interface SmartFolder {
@@ -199,12 +255,34 @@ export interface Stats {
   tags: number
   folders: number
   bytes: number
+  /** 导入失败、等待处理的文件数 */
+  errors: number
+}
+
+/** 导入配置，会记住上次的选择 */
+export interface ImportOptions {
+  /** 递归扫描子目录 */
+  recursive: boolean
+  /** 跳过内容重复的照片 */
+  skipDuplicates: boolean
 }
 
 export interface ImportProgress {
+  phase: 'scanning' | 'importing' | 'paused'
   total: number
   done: number
+  remaining: number
+  added: number
+  skipped: number
+  failed: number
   current: string
+  paused: boolean
+}
+
+export interface ImportErrorInfo {
+  path: string
+  name: string
+  message: string
 }
 
 export interface ImportResult {
@@ -212,6 +290,44 @@ export interface ImportResult {
   skipped: number
   failed: number
   relinked: number
+  scanned: number
+  cancelled: boolean
+  errors: ImportErrorInfo[]
+  /** 本次导入涉及的根目录，用于导入后按原文件夹展示 */
+  roots: string[]
+}
+
+/** 媒体库里的源目录树节点 */
+export interface ImportDirNode {
+  path: string
+  name: string
+  /** 本目录直接包含的图片数 */
+  count: number
+  /** 含子目录的图片总数 */
+  total: number
+  children: ImportDirNode[]
+}
+
+/** 手动「刷新图库」的结果 */
+export interface SyncResult {
+  /** 扫描到的图片文件数 */
+  scanned: number
+  added: number
+  missing: number
+  restored: number
+  refreshed: number
+  failed: number
+  /** 已经不存在的源目录（需要重新定位或重新导入） */
+  missingRoots: string[]
+}
+
+/** 上次被中断（关软件/崩溃）的导入任务，用于下次启动时继续 */
+export interface PendingImport {
+  paths: string[]
+  options: ImportOptions
+  startedAt: number
+  total: number
+  done: number
 }
 
 export interface DuplicateGroup {
@@ -219,18 +335,30 @@ export interface DuplicateGroup {
   items: Item[]
 }
 
+/** 启动时恢复上次图库的结果 */
+export interface LastLibraryResult {
+  dir: string | null
+  /** 上次把索引放在别处，但那个目录里已经没有 library.db 了 */
+  indexMissing?: string
+}
+
 export interface Api {
   pickLibraryDir: () => Promise<string | null>
   createLibrary: (dir: string) => Promise<string>
   openLibrary: (dir: string) => Promise<string>
-  lastLibrary: () => Promise<string | null>
+  lastLibrary: () => Promise<LastLibraryResult>
+  /** 索引（library.db / 缩略图 / 预览）当前放在哪 */
+  getLibraryStorage: () => Promise<LibraryStorage | null>
+  /** 选一个文件夹并把索引搬过去 */
+  pickIndexDir: () => Promise<IndexMoveResult>
+  /** target 为 null 表示搬回图库目录 */
+  moveIndexDir: (target: string | null) => Promise<IndexMoveResult>
   listItems: (
     filter: FilterState,
     offset?: number,
     limit?: number
   ) => Promise<{ items: Item[]; total: number }>
   getItem: (id: number) => Promise<Item | null>
-  filteredIds: (filter: FilterState) => Promise<number[]>
   updateItem: (
     id: number,
     patch: { rating?: number; note?: string; url?: string; flag?: number }
@@ -256,7 +384,17 @@ export interface Api {
   deleteSmart: (id: number) => Promise<void>
   pickImages: () => Promise<string[]>
   pickFolder: () => Promise<string | null>
-  importPaths: (paths: string[]) => Promise<ImportResult>
+  importPaths: (paths: string[], options?: Partial<ImportOptions>) => Promise<ImportResult>
+  pauseImport: () => Promise<void>
+  resumeImport: () => Promise<void>
+  cancelImport: () => Promise<void>
+  importStatus: () => Promise<ImportProgress | null>
+  getImportOptions: () => Promise<ImportOptions>
+  saveImportOptions: (options: Partial<ImportOptions>) => Promise<ImportOptions>
+  listDirTree: () => Promise<ImportDirNode[]>
+  syncLibrary: () => Promise<SyncResult>
+  pendingImport: () => Promise<PendingImport | null>
+  discardPendingImport: () => Promise<void>
   findDuplicates: () => Promise<DuplicateGroup[]>
   backupLibrary: () => Promise<{ path: string; size: number } | null>
   restoreLibrary: () => Promise<string | null>
@@ -266,6 +404,9 @@ export interface Api {
   pickAutoBackupDir: () => Promise<string | null>
   onAutoBackup: (cb: (result: AutoBackupResult) => void) => () => void
   clipStatus: () => Promise<ClipStatus>
+  getClipAutoIndex: () => Promise<boolean>
+  saveClipAutoIndex: (enabled: boolean) => Promise<boolean>
+  onClipAutoStatus: (cb: (status: ClipStatus) => void) => () => void
   clipIndex: () => Promise<{ indexed: number; failed: number; cancelled: boolean }>
   clipCancel: () => Promise<void>
   clipSearchText: (
@@ -293,6 +434,7 @@ export interface Api {
   saveGear: (item: GearSpec & { id?: string }) => Promise<GearItem>
   deleteGear: (id: string) => Promise<void>
   gearCatalog: () => Promise<GearSpec[]>
+  gearSuggestions: () => Promise<GearSuggestion[]>
   gearScenarios: () => Promise<ScenarioOption[]>
   recommendGear: (scenario: ScenarioId) => Promise<GearRecommendation>
   gearUsage: () => Promise<GearUsage>
@@ -307,11 +449,47 @@ export interface Api {
   deleteKit: (id: string) => Promise<void>
   getTheme: () => Promise<ThemeMode>
   saveTheme: (mode: ThemeMode) => Promise<ThemeMode>
+  getSkin: () => Promise<SkinId>
+  saveSkin: (id: SkinId) => Promise<SkinId>
+  llmStatus: () => Promise<LlmStatus>
+  llmSaveConfig: (patch: Partial<LlmConfig>) => Promise<LlmStatus>
+  llmSaveKey: (key: string) => Promise<LlmStatus>
+  llmClearKey: () => Promise<LlmStatus>
+  llmTest: () => Promise<LlmTestResult>
+  llmRun: (capabilityId: string, input: unknown) => Promise<LlmRunOutcome>
+  /** 评分并落库，返回每张的分数与实际写入条数 */
+  llmScore: (itemIds: number[]) => Promise<LlmRunOutcome<PhotoQualitySaved>>
   startDrag: (itemId: number) => void
   confirm: (message: string, detail?: string) => Promise<boolean>
+  replyDialog: (id: number, result: AppDialogResult) => void
   getPathForFile: (file: File) => string
   onImportProgress: (cb: (p: ImportProgress) => void) => () => void
   onLibraryChanged: (cb: (info: LibraryChange) => void) => () => void
+  onDialogRequest: (cb: (request: AppDialogRequest) => void) => () => void
+}
+
+/** 主进程要弹的确认框参数，界面用应用内弹窗渲染 */
+export interface AppDialogOptions {
+  kind?: 'question' | 'warning' | 'error' | 'info'
+  title: string
+  detail?: string
+  confirmText?: string
+  cancelText?: string
+  /** 危险操作（删除、覆盖）把确认按钮标红 */
+  danger?: boolean
+  /** 只给一个确认按钮，没有取消 */
+  onlyConfirm?: boolean
+  checkboxLabel?: string
+  checkboxChecked?: boolean
+}
+
+export interface AppDialogRequest extends AppDialogOptions {
+  id: number
+}
+
+export interface AppDialogResult {
+  confirmed: boolean
+  checked: boolean
 }
 
 export interface LibraryChange {

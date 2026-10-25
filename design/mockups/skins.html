@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>月巢 · 界面风格预览</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 34px 30px 40px;
+        background: #0a0b0e;
+        color: #dfe5ee;
+        font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      h1 { margin: 0 0 4px; font-size: 19px; font-weight: 600; letter-spacing: 0.3px; }
+      .lede { margin: 0 0 26px; font-size: 12.5px; color: #77808f; }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(2, 560px);
+        gap: 26px 28px;
+        justify-content: center;
+      }
+      figure { margin: 0; }
+      figcaption {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-top: 9px;
+        padding-left: 2px;
+      }
+      figcaption b { font-size: 13px; font-weight: 600; color: #e6ecf5; }
+      figcaption span { font-size: 11.5px; color: #737d8d; }
+
+      /* ---------- 一套可复用的「迷你主界面」结构，颜色全部来自变量 ---------- */
+      .win {
+        width: 560px;
+        height: 344px;
+        display: flex;
+        overflow: hidden;
+        border-radius: 11px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+      }
+      .side {
+        width: 132px;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 11px 9px;
+        background: var(--panel);
+        border-right: 1px solid var(--border);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 10px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+      }
+      .dot {
+        width: 14px; height: 14px; border-radius: 50%;
+        background: radial-gradient(circle at 32% 30%, var(--accent-2), var(--accent));
+        box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
+      }
+      .nav {
+        font-size: 10.5px;
+        color: var(--muted);
+        padding: 4px 7px;
+        border-radius: 6px;
+        white-space: nowrap;
+      }
+      .nav.on {
+        background: var(--accent-soft);
+        color: var(--accent-text);
+        border: 1px solid var(--accent-border);
+      }
+      .nav-label {
+        margin: 9px 0 3px 7px;
+        font-size: 9px;
+        letter-spacing: 0.8px;
+        color: var(--faint);
+      }
+      .tree { font-size: 10px; color: var(--muted); padding-left: 4px; }
+      .tree div { padding: 2.5px 6px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .tree .cur { background: var(--panel-3); color: var(--text); }
+      .side-foot {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        color: var(--faint);
+        padding: 5px 7px;
+        border-top: 1px solid var(--border);
+      }
+
+      .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+      .bar {
+        height: 40px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 11px;
+        border-bottom: 1px solid var(--border);
+      }
+      .field {
+        flex: 1;
+        height: 23px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0 8px;
+        font-size: 10px;
+        color: var(--faint);
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--input-focus-bg);
+      }
+      .pill {
+        height: 23px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 9px;
+        font-size: 10.5px;
+        white-space: nowrap;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--panel-2);
+        color: var(--text);
+      }
+      .pill.accent {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--on-accent);
+        font-weight: 600;
+      }
+      .crumb {
+        padding: 7px 12px 5px;
+        font-size: 10px;
+        color: var(--faint);
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .crumb b { color: var(--muted); font-weight: 500; }
+      .grid {
+        flex: 1;
+        padding: 2px 12px 12px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        align-content: start;
+      }
+      .ph {
+        position: relative;
+        border-radius: var(--radius);
+        overflow: hidden;
+        background: var(--stage);
+        box-shadow: var(--ph-shadow);
+        aspect-ratio: 4 / 3;
+      }
+      .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .ph.sel { box-shadow: var(--sel-shadow); }
+      .ph .tag {
+        position: absolute;
+        left: 4px; bottom: 4px;
+        padding: 1px 4px;
+        font-size: 8px;
+        border-radius: 3px;
+        background: rgba(0, 0, 0, 0.55);
+        color: #e8eef8;
+      }
+      .ph .star { position: absolute; right: 4px; top: 3px; font-size: 8px; color: var(--star); }
+      .ph.wide { grid-column: span 2; aspect-ratio: 16 / 7; }
+      .status {
+        height: 22px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        font-size: 9.5px;
+        color: var(--faint);
+        border-top: 1px solid var(--border);
+      }
+      .status .chip {
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: var(--success-soft);
+        color: var(--success);
+        border: 1px solid var(--success-border);
+      }
+      .status .warnchip {
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: var(--warn-soft);
+        color: var(--warn);
+        border: 1px solid var(--warn-border);
+      }
+
+      /* ---------- 六套主题变量 ---------- */
+      .classic {
+        --bg: #0b0d11; --panel: #101319; --panel-2: #151922; --panel-3: #1c212b;
+        --border: #232936; --border-strong: #2f3746; --text: #e7ebf2; --muted: #8b94a7;
+        --faint: #5b6474; --accent: #7aa2f7; --accent-2: #9dbcff; --accent-soft: #182338;
+        --accent-border: #2b3c58; --accent-text: #cfe0ff; --on-accent: #0a0d14;
+        --success: #8be9a8; --success-soft: #17241a; --success-border: #3c7a54;
+        --warn: #e8c07a; --warn-soft: #1f1a10; --warn-border: #4a3c22;
+        --star: #e8b45a; --stage: #0d1015; --input-focus-bg: #12161e;
+        --radius: 10px; --ph-shadow: none;
+        --sel-shadow: 0 0 0 2px var(--accent);
+      }
+      .eclipse {
+        --bg: #09070f; --panel: #0d0a15; --panel-2: #13101d; --panel-3: #1a1626;
+        --border: #201b2d; --border-strong: #2b243d; --text: #eceaf5; --muted: #958fae;
+        --faint: #655e7d; --accent: #a78bfa; --accent-2: #c4b5fd; --accent-soft: #191333;
+        --accent-border: #342a5c; --accent-text: #ddd0ff; --on-accent: #120a24;
+        --success: #8be9a8; --success-soft: #17241a; --success-border: #3c7a54;
+        --warn: #e8c07a; --warn-soft: #1f1a10; --warn-border: #4a3c22;
+        --star: #e8b45a; --stage: #0a0812; --input-focus-bg: #0e0b18;
+        --radius: 6px; --ph-shadow: none;
+        --sel-shadow: 0 0 0 2px var(--accent);
+      }
+      .aurora {
+        --bg: #05080f; --panel: #0a1018; --panel-2: rgba(255,255,255,.072);
+        --panel-3: rgba(255,255,255,.1); --border: rgba(255,255,255,.09);
+        --border-strong: rgba(255,255,255,.16); --text: #eaf0ff; --muted: #9aa7c4;
+        --faint: #64728f; --accent: #5eead4; --accent-2: #7dd3fc;
+        --accent-soft: rgba(94,234,212,.12); --accent-border: rgba(94,234,212,.32);
+        --accent-text: #c8fff5; --on-accent: #04211d;
+        --success: #5eead4; --success-soft: rgba(94,234,212,.1); --success-border: rgba(94,234,212,.35);
+        --warn: #fbbf24; --warn-soft: rgba(251,191,36,.1); --warn-border: rgba(251,191,36,.3);
+        --star: #fbbf24; --stage: rgba(255,255,255,.04); --input-focus-bg: rgba(255,255,255,.07);
+        --radius: 12px; --ph-shadow: 0 8px 24px rgba(0,0,0,.28);
+        --sel-shadow: 0 0 0 1.5px rgba(94,234,212,.8), 0 0 24px rgba(94,234,212,.18);
+      }
+      .aurora .win {
+        background:
+          radial-gradient(320px 200px at 12% -8%, rgba(94,234,212,.16), transparent 62%),
+          radial-gradient(320px 220px at 100% 0%, rgba(167,139,250,.16), transparent 60%),
+          #05080f;
+      }
+      .aurora .side { backdrop-filter: blur(20px); }
+      .graphite {
+        --bg: #0f1113; --panel: #141619; --panel-2: #191c20; --panel-3: #1f2328;
+        --border: #23272d; --border-strong: #2e343c; --text: #e6e9ee; --muted: #8d949f;
+        --faint: #5d6570; --accent: #9aa7b8; --accent-2: #c3ccda; --accent-soft: #1d2228;
+        --accent-border: #333b46; --accent-text: #d7dfea; --on-accent: #14171b;
+        --success: #8fbf9f; --success-soft: #18231b; --success-border: #365440;
+        --warn: #d7b36a; --warn-soft: #211d14; --warn-border: #4a3f27;
+        --star: #d9b26a; --stage: #0c0e10; --input-focus-bg: #14171b;
+        --radius: 4px; --ph-shadow: none;
+        --sel-shadow: 0 0 0 2px #e6e9ee;
+      }
+      .paper {
+        --bg: #f6f4f0; --panel: #fbfaf8; --panel-2: #f1ede6; --panel-3: #e9e3d9;
+        --border: #e6e0d6; --border-strong: #d8d0c2; --text: #26231f; --muted: #6f6a61;
+        --faint: #a39c90; --accent: #b4764a; --accent-2: #9a5f39; --accent-soft: #f2e7dc;
+        --accent-border: #e3cdb8; --accent-text: #7d4d2e; --on-accent: #fff;
+        --success: #3f7a52; --success-soft: #e9f3ec; --success-border: #c3ddcb;
+        --warn: #96631a; --warn-soft: #fdf3e0; --warn-border: #e7d3ac;
+        --star: #d99a2b; --stage: #eee9e1; --input-focus-bg: #fffdf9;
+        --radius: 4px; --ph-shadow: 0 6px 18px rgba(60,45,30,.07);
+        --sel-shadow: 0 0 0 2px var(--accent), 0 10px 26px rgba(60,45,30,.12);
+      }
+      .mist {
+        --bg: #f2f6fb; --panel: #fff; --panel-2: #eef3f9; --panel-3: #e4ebf4;
+        --border: #dce5ef; --border-strong: #c8d5e4; --text: #1c2633; --muted: #5f7085;
+        --faint: #93a3b6; --accent: #4f7fd4; --accent-2: #3d6cc0; --accent-soft: #e8effb;
+        --accent-border: #c2d4ef; --accent-text: #244a86; --on-accent: #fff;
+        --success: #2f7d4f; --success-soft: #e6f4ea; --success-border: #b9ddc6;
+        --warn: #96631a; --warn-soft: #fdf3e0; --warn-border: #e7d3ac;
+        --star: #d99a2b; --stage: #e9eff7; --input-focus-bg: #fff;
+        --radius: 8px; --ph-shadow: 0 4px 14px rgba(30,60,100,.06);
+        --sel-shadow: 0 0 0 2px var(--accent);
+      }
+      .paper .win, .mist .win { box-shadow: 0 14px 34px rgba(20, 30, 50, 0.13); }
+    </style>
+  </head>
+  <body>
+    <h1>月巢 · 六套界面风格</h1>
+    <p class="lede">同一个界面结构，只换配色与少量圆角/阴影，设置里点一下即可切换。</p>
+
+    <div class="board">
+      <figure class="classic">
+        <div class="win">
+          <aside class="side">
+            <div class="brand"><span class="dot"></span>月巢</div>
+            <div class="nav on">全部照片</div>
+            <div class="nav">收藏</div>
+            <div class="nav">最近导入</div>
+            <div class="nav-label">源目录</div>
+            <div class="tree"><div class="cur">▾ 2026 秋拍</div><div> ▸ 人像</div><div> ▸ 风景</div><div> ▸ 街拍</div></div>
+            <div class="side-foot">◐ 经典</div>
+          </aside>
+          <div class="main">
+            <div class="bar">
+              <div class="field">⌕ 搜索照片</div>
+              <div class="pill">刷新</div>
+              <div class="pill accent">＋ 导入</div>
+            </div>
+            <div class="crumb"><b>全部照片</b><span>·</span><span>1,284 张</span></div>
+            <div class="grid">
+              <div class="ph sel"><img src="images/01.webp" /><span class="star">★★★★★</span></div>
+              <div class="ph"><img src="images/02.webp" /></div>
+              <div class="ph"><img src="images/03.webp" /><span class="tag">RAW</span></div>
+              <div class="ph"><img src="images/04.webp" /></div>
+              <div class="ph"><img src="images/05.webp" /></div>
+              <div class="ph"><img src="images/06.webp" /><span class="tag">HEIC</span></div>
+              <div class="ph"><img src="images/07.webp" /></div>
+              <div class="ph"><img src="images/08.webp" /></div>
+            </div>
+            <div class="status"><span class="chip">✓ 已索引 1,180</span><span>语义索引空闲中</span><span class="warnchip">3 个无法读取</span></div>
+          </div>
+        </div>
+        <figcaption><b>经典</b><span>当前外观 · 跟随系统深浅</span></figcaption>
+      </figure>
+
+      <figure class="eclipse">
+        <div class="win">
+          <aside class="side">
+            <div class="brand"><span class="dot"></span>月巢</div>
+            <div class="nav on">全部照片</div>
+            <div class="nav">收藏</div>
+            <div class="nav">最近导入</div>
+            <div class="nav-label">源目录</div>
+            <div class="tree"><div class="cur">▾ 2026 秋拍</div><div> ▸ 人像</div><div> ▸ 风景</div><div> ▸ 街拍</div></div>
+            <div class="side-foot">◐ 月蚀</div>
+          </aside>
+          <div class="main">
+            <div class="bar">
+              <div class="field">⌕ 搜索照片</div>
+              <div class="pill">刷新</div>
+              <div class="pill accent">＋ 导入</div>
+            </div>
+            <div class="crumb"><b>全部照片</b><span>·</span><span>1,284 张</span></div>
+            <div class="grid">
+              <div class="ph sel"><img src="images/01.webp" /><span class="star">★★★★★</span></div>
+              <div class="ph"><img src="images/02.webp" /></div>
+              <div class="ph"><img src="images/03.webp" /><span class="tag">RAW</span></div>
+              <div class="ph"><img src="images/04.webp" /></div>
+              <div class="ph"><img src="images/05.webp" /></div>
+              <div class="ph"><img src="images/06.webp" /><span class="tag">HEIC</span></div>
+              <div class="ph"><img src="images/07.webp" /></div>
+              <div class="ph"><img src="images/08.webp" /></div>
+            </div>
+            <div class="status"><span class="chip">✓ 已索引 1,180</span><span>语义索引空闲中</span><span class="warnchip">3 个无法读取</span></div>
+          </div>
+        </div>
+        <figcaption><b>月蚀</b><span>夜色紫黑 · 月光紫</span></figcaption>
+      </figure>
+
+      <figure class="aurora">
+        <div class="win">
+          <aside class="side">
+            <div class="brand"><span class="dot"></span>月巢</div>
+            <div class="nav on">全部照片</div>
+            <div class="nav">收藏</div>
+            <div class="nav">最近导入</div>
+            <div class="nav-label">源目录</div>
+            <div class="tree"><div class="cur">▾ 2026 秋拍</div><div> ▸ 人像</div><div> ▸ 风景</div><div> ▸ 街拍</div></div>
+            <div class="side-foot">◐ 夜航</div>
+          </aside>
+          <div class="main">
+            <div class="bar">
+              <div class="field">⌕ 搜索照片</div>
+              <div class="pill">刷新</div>
+              <div class="pill accent">＋ 导入</div>
+            </div>
+            <div class="crumb"><b>全部照片</b><span>·</span><span>1,284 张</span></div>
+            <div class="grid">
+              <div class="ph sel"><img src="images/01.webp" /><span class="star">★★★★★</span></div>
+              <div class="ph"><img src="images/02.webp" /></div>
+              <div class="ph"><img src="images/03.webp" /><span class="tag">RAW</span></div>
+              <div class="ph"><img src="images/04.webp" /></div>
+              <div class="ph"><img src="images/05.webp" /></div>
+              <div class="ph"><img src="images/06.webp" /><span class="tag">HEIC</span></div>
+              <div class="ph"><img src="images/07.webp" /></div>
+              <div class="ph"><img src="images/08.webp" /></div>
+            </div>
+            <div class="status"><span class="chip">✓ 已索引 1,180</span><span>语义索引空闲中</span><span class="warnchip">3 个无法读取</span></div>
+          </div>
+        </div>
+        <figcaption><b>夜航</b><span>深色玻璃 · 青绿光晕</span></figcaption>
+      </figure>
+
+      <figure class="graphite">
+        <div class="win">
+          <aside class="side">
+            <div class="brand"><span class="dot"></span>月巢</div>
+            <div class="nav on">全部照片</div>
+            <div class="nav">收藏</div>
+            <div class="nav">最近导入</div>
+            <div class="nav-label">源目录</div>
+            <div class="tree"><div class="cur">▾ 2026 秋拍</div><div> ▸ 人像</div><div> ▸ 风景</div><div> ▸ 街拍</div></div>
+            <div class="side-foot">◐ 墨岩</div>
+          </aside>
+          <div class="main">
+            <div class="bar">
+              <div class="field">⌕ 搜索照片</div>
+              <div class="pill">刷新</div>
+              <div class="pill accent">＋ 导入</div>
+            </div>
+            <div class="crumb"><b>全部照片</b><span>·</span><span>1,284 张</span></div>
+            <div class="grid">
+              <div class="ph sel"><img src="images/01.webp" /><span class="star">★★★★★</span></div>
+              <div class="ph"><img src="images/02.webp" /></div>
+              <div class="ph"><img src="images/03.webp" /><span class="tag">RAW</span></div>
+              <div class="ph"><img src="images/04.webp" /></div>
+              <div class="ph"><img src="images/05.webp" /></div>
+              <div class="ph"><img src="images/06.webp" /><span class="tag">HEIC</span></div>
+              <div class="ph"><img src="images/07.webp" /></div>
+              <div class="ph"><img src="images/08.webp" /></div>
+            </div>
+            <div class="status"><span class="chip">✓ 已索引 1,180</span><span>语义索引空闲中</span><span class="warnchip">3 个无法读取</span></div>
+          </div>
+        </div>
+        <figcaption><b>墨岩</b><span>中性深灰 · 低饱和极简</span></figcaption>
+      </figure>
+
+      <figure class="paper">
+        <div class="win">
+          <aside class="side">
+            <div class="brand"><span class="dot"></span>月巢</div>
+            <div class="nav on">全部照片</div>
+            <div class="nav">收藏</div>
+            <div class="nav">最近导入</div>
+            <div class="nav-label">源目录</div>
+            <div class="tree"><div class="cur">▾ 2026 秋拍</div><div> ▸ 人像</div><div> ▸ 风景</div><div> ▸ 街拍</div></div>
+            <div class="side-foot">◐ 柔光</div>
+          </aside>
+          <div class="main">
+            <div class="bar">
+              <div class="field">⌕ 搜索照片</div>
+              <div class="pill">刷新</div>
+              <div class="pill accent">＋ 导入</div>
+            </div>
+            <div class="crumb"><b>全部照片</b><span>·</span><span>1,284 张</span></div>
+            <div class="grid">
+              <div class="ph sel"><img src="images/01.webp" /><span class="star">★★★★★</span></div>
+              <div class="ph"><img src="images/02.webp" /></div>
+              <div class="ph"><img src="images/03.webp" /><span class="tag">RAW</span></div>
+              <div class="ph"><img src="images/04.webp" /></div>
+              <div class="ph"><img src="images/05.webp" /></div>
+              <div class="ph"><img src="images/06.webp" /><span class="tag">HEIC</span></div>
+              <div class="ph"><img src="images/07.webp" /></div>
+              <div class="ph"><img src="images/08.webp" /></div>
+            </div>
+            <div class="status"><span class="chip">✓ 已索引 1,180</span><span>语义索引空闲中</span><span class="warnchip">3 个无法读取</span></div>
+          </div>
+        </div>
+        <figcaption><b>柔光</b><span>浅色画册 · 暖白陶土</span></figcaption>
+      </figure>
+
+      <figure class="mist">
+        <div class="win">
+          <aside class="side">
+            <div class="brand"><span class="dot"></span>月巢</div>
+            <div class="nav on">全部照片</div>
+            <div class="nav">收藏</div>
+            <div class="nav">最近导入</div>
+            <div class="nav-label">源目录</div>
+            <div class="tree"><div class="cur">▾ 2026 秋拍</div><div> ▸ 人像</div><div> ▸ 风景</div><div> ▸ 街拍</div></div>
+            <div class="side-foot">◐ 雾蓝</div>
+          </aside>
+          <div class="main">
+            <div class="bar">
+              <div class="field">⌕ 搜索照片</div>
+              <div class="pill">刷新</div>
+              <div class="pill accent">＋ 导入</div>
+            </div>
+            <div class="crumb"><b>全部照片</b><span>·</span><span>1,284 张</span></div>
+            <div class="grid">
+              <div class="ph sel"><img src="images/01.webp" /><span class="star">★★★★★</span></div>
+              <div class="ph"><img src="images/02.webp" /></div>
+              <div class="ph"><img src="images/03.webp" /><span class="tag">RAW</span></div>
+              <div class="ph"><img src="images/04.webp" /></div>
+              <div class="ph"><img src="images/05.webp" /></div>
+              <div class="ph"><img src="images/06.webp" /><span class="tag">HEIC</span></div>
+              <div class="ph"><img src="images/07.webp" /></div>
+              <div class="ph"><img src="images/08.webp" /></div>
+            </div>
+            <div class="status"><span class="chip">✓ 已索引 1,180</span><span>语义索引空闲中</span><span class="warnchip">3 个无法读取</span></div>
+          </div>
+        </div>
+        <figcaption><b>雾蓝</b><span>冷调浅色 · 清透蓝灰</span></figcaption>
+      </figure>
+    </div>
+  </body>
+</html>

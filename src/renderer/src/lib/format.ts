@@ -46,3 +46,10 @@ export function folderName(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean)
   return parts[parts.length - 1] ?? path
 }
+
+/** AI 评分配色：80 以上绿、60 以上黄、其余红，卡片与详情共用一套标准 */
+export function scoreColor(score: number): string {
+  if (score >= 80) return 'var(--success)'
+  if (score >= 60) return 'var(--warn)'
+  return 'var(--danger-text)'
+}

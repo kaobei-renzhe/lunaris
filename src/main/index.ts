@@ -5,7 +5,10 @@ import { BrowserWindow, app, nativeTheme, net, protocol } from 'electron'
 import { registerIpc, stopLibraryWatcher } from './ipc'
 import { getLightboxFile, thumbPathFor } from './repo'
 import { closeLibrary } from './db'
-import { getTheme } from './settings'
+import { getSkin, getTheme } from './settings'
+import { log } from './logger'
+import { installCrashGuards } from './crash'
+import { SKINS } from '../shared/skins'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -18,6 +21,9 @@ protocol.registerSchemesAsPrivileged([
   }
 ])
 
+// 越早安装越好：启动阶段的异常也要能落盘
+installCrashGuards()
+
 function parseId(request: Request): number {
   const url = new URL(request.url)
   return Number(url.pathname.replace(/^\/+/, ''))
@@ -27,6 +33,17 @@ function notFound(): Response {
   return new Response('Not found', { status: 404 })
 }
 
+function currentSkin() {
+  return SKINS.find((skin) => skin.id === getSkin()) ?? SKINS[0]
+}
+
+/** 首帧窗口底色：固定风格用皮肤底色，经典跟随深浅 */
+function windowBackground(): string {
+  const skin = currentSkin()
+  if (skin.mode !== 'auto') return skin.base
+  return nativeTheme.shouldUseDarkColors ? '#0b0d11' : '#f6f7fa'
+}
+
 function createWindow(): void {
   const iconPath = join(app.getAppPath(), 'build', 'icon.png')
   const win = new BrowserWindow({
@@ -34,13 +51,14 @@ function createWindow(): void {
     height: 920,
     minWidth: 1080,
     minHeight: 680,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d11' : '#f6f7fa',
+    backgroundColor: windowBackground(),
     autoHideMenuBar: true,
     title: '月巢',
     ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      // 沙箱实测：preload 仍能拿到 ipcRenderer / contextBridge / webUtils.getPathForFile
+      sandbox: true
     }
   })
 
@@ -58,7 +76,13 @@ const customUserData = process.env.IMAGENEST_USER_DATA
 if (customUserData) app.setPath('userData', customUserData)
 
 app.whenReady().then(() => {
-  nativeTheme.themeSource = getTheme()
+  void log.info('app', '启动', {
+    version: app.getVersion(),
+    electron: process.versions.electron,
+    userData: app.getPath('userData')
+  })
+  const skin = currentSkin()
+  nativeTheme.themeSource = skin.mode === 'auto' ? getTheme() : skin.mode
 
   protocol.handle('thumb', async (request) => {
     try {
@@ -93,7 +117,14 @@ app.whenReady().then(() => {
   })
 })
 
+app.on('before-quit', () => {
+  void log.info('app', '准备退出，收尾数据库')
+  // closeLibrary 内部会 checkpoint，异常退出后下次打开也会再收一次
+  closeLibrary()
+})
+
 app.on('window-all-closed', () => {
+  void log.info('app', '窗口全部关闭，退出')
   stopLibraryWatcher()
   closeLibrary()
   app.quit()

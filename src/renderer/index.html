@@ -4,19 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>月巢</title>
-    <script>
-      ;(() => {
-        try {
-          const stored = localStorage.getItem('moonnest:theme')
-          const dark =
-            stored === 'dark' ||
-            (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-        } catch {
-          document.documentElement.dataset.theme = 'dark'
-        }
-      })()
-    </script>
+    <!-- 首屏上色脚本走外链，这样 CSP 可以彻底禁用内联脚本 -->
+    <script src="./theme-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,11 +1,14 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   Api,
+  AppDialogRequest,
   AutoBackupResult,
   AutoTagProgress,
   ClipDownloadProgress,
   ClipProgress,
+  ClipStatus,
   FilterState,
+  ImportOptions,
   ImportProgress,
   LibraryChange
 } from '../shared/types'
@@ -15,11 +18,13 @@ const api: Api = {
   createLibrary: (dir: string) => ipcRenderer.invoke('library:create', dir),
   openLibrary: (dir: string) => ipcRenderer.invoke('library:open', dir),
   lastLibrary: () => ipcRenderer.invoke('library:last'),
+  getLibraryStorage: () => ipcRenderer.invoke('library:storage'),
+  pickIndexDir: () => ipcRenderer.invoke('library:index:pick'),
+  moveIndexDir: (target) => ipcRenderer.invoke('library:index:move', target),
 
   listItems: (filter: FilterState, offset?: number, limit?: number) =>
     ipcRenderer.invoke('items:list', filter, offset, limit),
   getItem: (id: number) => ipcRenderer.invoke('items:get', id),
-  filteredIds: (filter: FilterState) => ipcRenderer.invoke('items:filteredIds', filter),
   updateItem: (id: number, patch) => ipcRenderer.invoke('items:update', id, patch),
   deleteItems: (ids: number[]) => ipcRenderer.invoke('items:delete', ids),
   restoreItems: (ids: number[]) => ipcRenderer.invoke('items:restore', ids),
@@ -49,7 +54,19 @@ const api: Api = {
 
   pickImages: () => ipcRenderer.invoke('import:pickImages'),
   pickFolder: () => ipcRenderer.invoke('import:pickFolder'),
-  importPaths: (paths: string[]) => ipcRenderer.invoke('import:paths', paths),
+  importPaths: (paths: string[], options?: Partial<ImportOptions>) =>
+    ipcRenderer.invoke('import:paths', paths, options),
+  pauseImport: () => ipcRenderer.invoke('import:pause'),
+  resumeImport: () => ipcRenderer.invoke('import:resume'),
+  cancelImport: () => ipcRenderer.invoke('import:cancel'),
+  importStatus: () => ipcRenderer.invoke('import:status'),
+  getImportOptions: () => ipcRenderer.invoke('import:options:get'),
+  saveImportOptions: (options: Partial<ImportOptions>) =>
+    ipcRenderer.invoke('import:options:save', options),
+  listDirTree: () => ipcRenderer.invoke('dirs:tree'),
+  syncLibrary: () => ipcRenderer.invoke('library:sync'),
+  pendingImport: () => ipcRenderer.invoke('import:pending'),
+  discardPendingImport: () => ipcRenderer.invoke('import:pending:discard'),
 
   findDuplicates: () => ipcRenderer.invoke('duplicates:find'),
   backupLibrary: () => ipcRenderer.invoke('library:backup'),
@@ -59,6 +76,8 @@ const api: Api = {
   saveAutoBackup: (patch) => ipcRenderer.invoke('settings:autoBackup:save', patch),
   pickAutoBackupDir: () => ipcRenderer.invoke('settings:autoBackup:pickDir'),
   clipStatus: () => ipcRenderer.invoke('clip:status'),
+  getClipAutoIndex: () => ipcRenderer.invoke('clip:autoIndex:get'),
+  saveClipAutoIndex: (enabled: boolean) => ipcRenderer.invoke('clip:autoIndex:save', enabled),
   clipIndex: () => ipcRenderer.invoke('clip:index'),
   clipCancel: () => ipcRenderer.invoke('clip:cancel'),
   clipSearchText: (query: string, filter: FilterState, limit?: number) =>
@@ -81,6 +100,7 @@ const api: Api = {
   saveGear: (item) => ipcRenderer.invoke('gear:save', item),
   deleteGear: (id: string) => ipcRenderer.invoke('gear:delete', id),
   gearCatalog: () => ipcRenderer.invoke('gear:catalog'),
+  gearSuggestions: () => ipcRenderer.invoke('gear:suggestions'),
   gearScenarios: () => ipcRenderer.invoke('gear:scenarios'),
   recommendGear: (scenario) => ipcRenderer.invoke('gear:recommend', scenario),
   gearUsage: () => ipcRenderer.invoke('gear:usage'),
@@ -89,8 +109,23 @@ const api: Api = {
   deleteKit: (id: string) => ipcRenderer.invoke('gear:kitDelete', id),
   getTheme: () => ipcRenderer.invoke('settings:theme:get'),
   saveTheme: (mode) => ipcRenderer.invoke('settings:theme:save', mode),
+  getSkin: () => ipcRenderer.invoke('settings:skin:get'),
+  saveSkin: (id) => ipcRenderer.invoke('settings:skin:save', id),
+  llmStatus: () => ipcRenderer.invoke('llm:status'),
+  llmSaveConfig: (patch) => ipcRenderer.invoke('llm:config:save', patch),
+  llmSaveKey: (key) => ipcRenderer.invoke('llm:key:save', key),
+  llmClearKey: () => ipcRenderer.invoke('llm:key:clear'),
+  llmTest: () => ipcRenderer.invoke('llm:test'),
+  llmRun: (capabilityId, input) => ipcRenderer.invoke('llm:run', capabilityId, input),
+  llmScore: (itemIds) => ipcRenderer.invoke('llm:quality', itemIds),
   startDrag: (itemId: number) => ipcRenderer.send('shell:startDrag', itemId),
   confirm: (message: string, detail?: string) => ipcRenderer.invoke('ui:confirm', message, detail),
+  replyDialog: (id, result) => ipcRenderer.send('ui:dialog-reply', id, result),
+  onDialogRequest: (cb) => {
+    const handler = (_e: unknown, request: AppDialogRequest): void => cb(request)
+    ipcRenderer.on('ui:dialog-request', handler)
+    return () => ipcRenderer.removeListener('ui:dialog-request', handler)
+  },
 
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   onImportProgress: (cb: (p: ImportProgress) => void) => {
@@ -112,6 +147,11 @@ const api: Api = {
     const handler = (_e: unknown, payload: ClipProgress): void => cb(payload)
     ipcRenderer.on('clip:index-progress', handler)
     return () => ipcRenderer.removeListener('clip:index-progress', handler)
+  },
+  onClipAutoStatus: (cb: (status: ClipStatus) => void) => {
+    const handler = (_e: unknown, payload: ClipStatus): void => cb(payload)
+    ipcRenderer.on('clip:auto-status', handler)
+    return () => ipcRenderer.removeListener('clip:auto-status', handler)
   },
   onClipDownload: (cb: (progress: ClipDownloadProgress) => void) => {
     const handler = (_e: unknown, payload: ClipDownloadProgress): void => cb(payload)
