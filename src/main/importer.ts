@@ -28,6 +28,7 @@ import { extractEmbeddedPreview } from './raw'
 import { regroup } from './grouping'
 import { log } from './logger'
 import { HEIF_EXT, RAW_EXT, SUPPORTED_EXT } from '../shared/formats'
+import { THUMB_SIZES, THUMB_WEBP_QUALITY, type ThumbQuality } from '../shared/thumbs'
 import type {
   ExifData,
   ImportErrorInfo,
@@ -226,17 +227,13 @@ async function collectFiles(
   return scan
 }
 
-async function makeThumb(
-  source: string | Buffer,
-  target: string,
-  size: number,
-  quality = 82
-): Promise<void> {
+async function makeThumb(source: string | Buffer, target: string, quality: ThumbQuality): Promise<void> {
+  const size = THUMB_SIZES[quality]
   mkdirSync(dirname(target), { recursive: true })
   await sharp(source, { failOn: 'none', sequentialRead: true })
     .rotate()
     .resize(size, size, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality })
+    .webp({ quality: THUMB_WEBP_QUALITY[quality] })
     .toFile(target)
 }
 
@@ -458,10 +455,10 @@ async function processItem(id: number, filePath: string): Promise<void> {
     height = swap ? exifWidth : exifHeight
   }
 
-  const large = thumbPathFor(id)
-  const small = thumbPathFor(id, true)
-  await makeThumb(source, large, 720)
-  await makeThumb(source, small, 260, 78)
+  const large = thumbPathFor(id, 'mid')
+  const small = thumbPathFor(id, 'low')
+  await makeThumb(source, large, 'mid')
+  await makeThumb(source, small, 'low')
 
   const color = await analyzeColor(source)
   const hash = await computeDHash(source)
@@ -499,7 +496,7 @@ export async function rebuildThumbs(
     .all() as Array<{ id: number; path: string; ext: string }>
 
   const todo = rows.filter(
-    (row) => !existsSync(thumbPathFor(row.id)) || !existsSync(thumbPathFor(row.id, true))
+    (row) => !existsSync(thumbPathFor(row.id, 'mid')) || !existsSync(thumbPathFor(row.id, 'low'))
   )
   let done = 0
   let rebuilt = 0
@@ -546,8 +543,8 @@ export async function rebuildThumbs(
         }
         source = preview
       }
-      await makeThumb(source, thumbPathFor(row.id), 720)
-      await makeThumb(source, thumbPathFor(row.id, true), 260, 78)
+      await makeThumb(source, thumbPathFor(row.id, 'mid'), 'mid')
+      await makeThumb(source, thumbPathFor(row.id, 'low'), 'low')
       rebuilt++
     } catch {
       failed++
@@ -903,8 +900,9 @@ export async function reprocessPaths(
         // 先清掉旧尺寸与缓存，交给 processItem 整份重算
         db.prepare('UPDATE items SET width = 0, height = 0, error = NULL WHERE id = ?').run(row.id)
         for (const cached of [
-          thumbPathFor(row.id),
-          thumbPathFor(row.id, true),
+          thumbPathFor(row.id, 'mid'),
+          thumbPathFor(row.id, 'low'),
+          thumbPathFor(row.id, 'high'),
           previewPathFor(row.id)
         ]) {
           try {

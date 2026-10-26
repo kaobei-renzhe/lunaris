@@ -153,7 +153,7 @@ export default function SmartFilterDialog({
                         className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-2 py-1.5"
                       >
                         <div className="w-[38px] h-[38px] shrink-0 rounded overflow-hidden border border-[var(--border)]">
-                          <img src={thumbUrl(id, true)} alt="" className="w-full h-full object-cover" />
+                          <img src={thumbUrl(id, 'low')} alt="" className="w-full h-full object-cover" />
                         </div>
                         <div className="min-w-0">
                           <div className="truncate text-[11.5px] text-[var(--text)]">

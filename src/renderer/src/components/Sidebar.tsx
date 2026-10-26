@@ -248,7 +248,10 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="w-[236px] shrink-0 border-r border-[var(--border)] bg-[var(--panel)] flex flex-col min-h-0">
+    <aside
+      className="shrink-0 border-r border-[var(--border)] bg-[var(--panel)] flex flex-col min-h-0 overflow-x-hidden"
+      style={{ width: 'var(--sidebar-w, 236px)' }}
+    >
       <div className="px-4 pt-4 pb-3 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
           <div className="w-[26px] h-[26px]">

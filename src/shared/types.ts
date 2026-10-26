@@ -1,4 +1,12 @@
 import type { SkinId } from './skins'
+import type { LayoutSizes } from './layout'
+import type {
+  ThumbCacheClearResult,
+  ThumbCacheLimitResult,
+  ThumbCacheStats,
+  ThumbCacheTarget,
+  ThumbQualityPref
+} from './thumbs'
 import type { LlmConfig, LlmRunOutcome, LlmStatus, LlmTestResult, PhotoQualitySaved } from './llm'
 
 export interface ExifData {
@@ -349,6 +357,19 @@ export interface Api {
   lastLibrary: () => Promise<LastLibraryResult>
   /** 索引（library.db / 缩略图 / 预览）当前放在哪 */
   getLibraryStorage: () => Promise<LibraryStorage | null>
+  /** 左栏 / 右栏宽度（记住用户拖过的值） */
+  getLayout: () => Promise<LayoutSizes>
+  saveLayout: (patch: Partial<LayoutSizes>) => Promise<LayoutSizes>
+  /** 瀑布流缩略图清晰度 */
+  getThumbQuality: () => Promise<ThumbQualityPref>
+  saveThumbQuality: (pref: ThumbQualityPref) => Promise<ThumbQualityPref>
+  /** 三档缩略图各占多少磁盘 */
+  thumbCacheStats: () => Promise<ThumbCacheStats>
+  /** 清理缩略图缓存（high = 只删高清档） */
+  clearThumbCache: (target?: ThumbCacheTarget) => Promise<ThumbCacheClearResult>
+  /** 高清缓存上限（MB），0 = 不限 */
+  getThumbCacheLimit: () => Promise<number>
+  saveThumbCacheLimit: (mb: number) => Promise<ThumbCacheLimitResult>
   /** 选一个文件夹并把索引搬过去 */
   pickIndexDir: () => Promise<IndexMoveResult>
   /** target 为 null 表示搬回图库目录 */
@@ -417,6 +438,8 @@ export interface Api {
   clipSimilar: (itemId: number, limit?: number) => Promise<{ items: Item[]; scores: number[] }>
   clipDownloadModel: () => Promise<string>
   onClipIndex: (cb: (progress: ClipProgress) => void) => () => void
+  /** 语义索引结束（完成 / 取消 / 出错都会发），用来收起进度卡片 */
+  onClipIndexEnd: (cb: () => void) => () => void
   onClipDownload: (cb: (progress: ClipDownloadProgress) => void) => () => void
   autoTagCategories: () => Promise<AutoTagCategory[]>
   getAutoTagSettings: () => Promise<AutoTagSettings>

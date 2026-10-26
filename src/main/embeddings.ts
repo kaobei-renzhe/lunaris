@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
+import sharp from 'sharp'
 import { getDb } from './db'
-import { filteredIds, getItem, getItemFile, getItemsByIds } from './repo'
+import { filteredIds, getItem, getItemFile, getItemsByIds, thumbPathFor } from './repo'
 import { dot, embedImage, embedText, MODEL_TAG, resolveModelDir } from './clip/embedder'
 import { beginIndexing, endIndexing, isTagging } from './taskLock'
 import { log } from './logger'
@@ -75,6 +76,9 @@ export async function indexEmbeddings(
   beginIndexing()
   cancelRequested = false
   const db = getDb()
+  // 索引是后台任务：libvips 线程压到 1，别和界面刷新、鼠标响应抢 CPU
+  const prevConcurrency = sharp.concurrency()
+  sharp.concurrency(1)
 
   try {
     const rows = db
@@ -94,44 +98,85 @@ export async function indexEmbeddings(
     const insert = db.prepare(
       'INSERT OR REPLACE INTO embeddings(item_id, model, dim, vec) VALUES(?, ?, ?, ?)'
     )
+    /** 写入攒够这么多条再提交；每张单独提交会 fsync 一次，几万张就是几万次磁盘抖动 */
+    const COMMIT_BATCH = 32
     let indexed = 0
     let failed = 0
     let done = 0
     let stopped = false
+    let pending = 0
+    let current = ''
+    let lastReport = 0
     const failureSamples: string[] = []
-    onProgress({ done, total, current: '' })
 
-    for (const row of rows) {
-      if (cancelRequested) break
-      if (options.shouldContinue && !options.shouldContinue()) {
-        stopped = true
-        break
-      }
-      const file = getItemFile(row.id)
-      try {
-        if (!file || !existsSync(file)) throw new Error('文件不可用')
-        const vector = await embedImage(file)
-        insert.run(
-          row.id,
-          MODEL_TAG,
-          vector.length,
-          Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength)
-        )
-        indexed++
-      } catch (error) {
-        failed++
-        // 只留前几条原因，够定位就行，避免日志被上万条刷爆
-        if (failureSamples.length < 3) failureSamples.push((error as Error).message || '未知错误')
-      }
-      done++
-      onProgress({ done, total, current: row.name })
+    /** 进度也别每张都发：每 16 张、且两次之间至少隔 1 秒，界面不会被消息刷屏 */
+    const REPORT_EVERY = 16
+    const REPORT_GAP_MS = 1000
+    const report = (force = false): void => {
+      const now = Date.now()
+      if (!force && done % REPORT_EVERY !== 0 && now - lastReport < REPORT_GAP_MS) return
+      lastReport = now
+      onProgress({ done, total, current })
     }
+    report(true)
+
+    db.exec('BEGIN')
+    let committed = false
+    try {
+      for (const row of rows) {
+        if (cancelRequested) break
+        if (options.shouldContinue && !options.shouldContinue()) {
+          stopped = true
+          break
+        }
+        // 缩略图已经压到 720px，解码成本比原图低一个数量级；缺失时才回退到原图
+        let source = thumbPathFor(row.id)
+        if (!existsSync(source)) source = getItemFile(row.id) ?? ''
+        try {
+          if (!source || !existsSync(source)) throw new Error('文件不可用')
+          const vector = await embedImage(source)
+          insert.run(
+            row.id,
+            MODEL_TAG,
+            vector.length,
+            Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength)
+          )
+          indexed++
+          if (++pending >= COMMIT_BATCH) {
+            db.exec('COMMIT')
+            db.exec('BEGIN')
+            pending = 0
+          }
+        } catch (error) {
+          failed++
+          // 只留前几条原因，够定位就行，避免日志被上万条刷爆
+          if (failureSamples.length < 3) failureSamples.push((error as Error).message || '未知错误')
+        }
+        done++
+        current = row.name
+        report()
+        // 让出一次事件循环，主进程才有空处理 IPC 与界面刷新
+        await new Promise<void>((resolve) => setImmediate(resolve))
+      }
+      db.exec('COMMIT')
+      committed = true
+    } finally {
+      if (!committed) {
+        try {
+          db.exec('ROLLBACK')
+        } catch {
+          /* 没有活动事务时忽略 */
+        }
+      }
+    }
+    report(true)
 
     if (failed > 0) {
       void log.warn('clip', '语义索引部分失败', { indexed, failed, total, samples: failureSamples })
     }
     return { indexed, failed, cancelled: cancelRequested, stopped }
   } finally {
+    sharp.concurrency(prevConcurrency)
     running = false
     cache = null
     endIndexing()

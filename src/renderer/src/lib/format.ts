@@ -1,4 +1,5 @@
 import type { ColorFamily } from '@shared/types'
+import type { ThumbQuality } from '@shared/thumbs'
 
 export function formatBytes(bytes: number): string {
   if (!bytes) return '0 B'
@@ -20,8 +21,8 @@ export function formatDate(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export function thumbUrl(id: number, small = false): string {
-  return `thumb://item/${id}${small ? '?s=1' : ''}`
+export function thumbUrl(id: number, quality: ThumbQuality = 'mid'): string {
+  return `thumb://item/${id}?q=${quality}`
 }
 
 export function photoUrl(id: number): string {

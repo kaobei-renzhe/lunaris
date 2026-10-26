@@ -2,6 +2,10 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
 import type { AutoTagSettings, ImportOptions, ThemeMode } from '../shared/types'
+import type { LayoutSizes } from '../shared/layout'
+import { normalizeLayout } from '../shared/layout'
+import type { ThumbQualityPref } from '../shared/thumbs'
+import { THUMB_CACHE_LIMIT_DEFAULT, THUMB_QUALITY_DEFAULT, isThumbQualityPref } from '../shared/thumbs'
 import type { LlmConfig } from '../shared/llm'
 import { DEFAULT_SKIN, isSkinId, type SkinId } from '../shared/skins'
 
@@ -24,6 +28,12 @@ export interface AppConfig {
   skin?: SkinId
   relocate?: { lastDir?: string }
   theme?: ThemeMode
+  /** 左栏 / 右栏拖过的宽度 */
+  layout?: Partial<LayoutSizes>
+  /** 瀑布流缩略图清晰度（auto = 按卡片实际像素自动选档） */
+  thumbQuality?: ThumbQualityPref
+  /** 高清缩略图缓存上限（MB），0 = 不限 */
+  thumbCacheLimitMB?: number
   llm?: Partial<LlmConfig>
 }
 
@@ -141,5 +151,42 @@ export function getSkin(): SkinId {
 export function saveSkin(id: SkinId): SkinId {
   const next = isSkinId(id) ? id : DEFAULT_SKIN
   updateConfig({ skin: next })
+  return next
+}
+
+/** 左栏 / 右栏宽度（记住用户拖过的值，越界会被收回合法范围） */
+export function getLayout(): LayoutSizes {
+  return normalizeLayout(readConfig().layout)
+}
+
+export function saveLayout(patch: Partial<LayoutSizes>): LayoutSizes {
+  const next = normalizeLayout({ ...getLayout(), ...patch })
+  updateConfig({ layout: next })
+  return next
+}
+
+/** 瀑布流缩略图清晰度档位 */
+export function getThumbQuality(): ThumbQualityPref {
+  const stored = readConfig().thumbQuality
+  return isThumbQualityPref(stored) ? stored : THUMB_QUALITY_DEFAULT
+}
+
+export function saveThumbQuality(pref: ThumbQualityPref): ThumbQualityPref {
+  const next = isThumbQualityPref(pref) ? pref : THUMB_QUALITY_DEFAULT
+  updateConfig({ thumbQuality: next })
+  return next
+}
+
+/** 高清缩略图缓存上限（MB），0 = 不限 */
+export function getThumbCacheLimitMB(): number {
+  const stored = readConfig().thumbCacheLimitMB
+  return typeof stored === 'number' && Number.isFinite(stored) && stored >= 0
+    ? Math.round(stored)
+    : THUMB_CACHE_LIMIT_DEFAULT
+}
+
+export function saveThumbCacheLimitMB(mb: number): number {
+  const next = Number.isFinite(mb) && mb >= 0 ? Math.round(mb) : THUMB_CACHE_LIMIT_DEFAULT
+  updateConfig({ thumbCacheLimitMB: next })
   return next
 }

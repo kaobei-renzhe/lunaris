@@ -146,14 +146,11 @@ export default function DetailPanel({
     onRefresh()
   }
 
-  const ratio = item.width > 0 && item.height > 0 ? item.width / item.height : 4 / 3
-  // 预览按原图比例显示，不再套固定 4:3 的取景框
-  const previewMaxHeight = 340
-  const previewWidth = Math.round(Math.min(296, previewMaxHeight * ratio))
-  const previewHeight = Math.round(previewWidth / ratio)
-
   return (
-    <aside className="w-[320px] shrink-0 border-l border-[var(--border)] bg-[var(--panel)] flex flex-col min-h-0">
+    <aside
+      className="shrink-0 border-l border-[var(--border)] bg-[var(--panel)] flex flex-col min-h-0 overflow-x-hidden"
+      style={{ width: 'var(--detail-w, 320px)' }}
+    >
       <div className="h-[42px] shrink-0 px-3 border-b border-[var(--border)] flex items-center gap-2">
         <div className="truncate text-[12.5px] font-medium" title={item.name}>
           {item.name}
@@ -165,15 +162,14 @@ export default function DetailPanel({
 
       <div className="flex-1 overflow-y-auto p-3">
         <div
-          className="rounded-xl overflow-hidden border border-[var(--border)] cursor-zoom-in mx-auto"
-          style={{ width: previewWidth, height: previewHeight }}
+          className="rounded-xl overflow-hidden border border-[var(--border)] cursor-zoom-in mx-auto w-fit max-w-full"
           onClick={onOpenLightbox}
           title="点击查看大图"
         >
           <img
             src={thumbUrl(item.id)}
             alt={item.name}
-            className="w-full h-full object-contain"
+            className="block max-h-[340px] max-w-full object-contain"
             draggable={false}
           />
         </div>

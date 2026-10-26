@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, nativeTheme, net, protocol } from 'electron'
 import { registerIpc, stopLibraryWatcher } from './ipc'
 import { getLightboxFile, thumbPathFor } from './repo'
+import { ensureThumb, pruneHighCache, touchHighThumb } from './thumbs'
+import { isThumbQuality } from '../shared/thumbs'
 import { closeLibrary } from './db'
 import { getSkin, getTheme } from './settings'
 import { log } from './logger'
@@ -87,10 +89,22 @@ app.whenReady().then(() => {
   protocol.handle('thumb', async (request) => {
     try {
       const id = parseId(request)
-      const small = new URL(request.url).searchParams.get('s') === '1'
-      const file = thumbPathFor(id, small)
-      if (!existsSync(file)) return notFound()
-      return net.fetch(pathToFileURL(file).toString())
+      const raw = new URL(request.url).searchParams.get('q')
+      const quality = isThumbQuality(raw) ? raw : 'mid'
+      // 三档都按需补：高档是常态，中/低档只在缓存被清理或缺失时才真正生成
+      await ensureThumb(id, quality)
+      // 高清还没生成好 / 小图缺失时逐级回退，界面不会出现空白
+      for (const fallback of [quality, 'mid', 'low'] as const) {
+        const file = thumbPathFor(id, fallback)
+        if (existsSync(file)) {
+          if (fallback === 'high') {
+            touchHighThumb(id)
+            void pruneHighCache()
+          }
+          return net.fetch(pathToFileURL(file).toString())
+        }
+      }
+      return notFound()
     } catch {
       return notFound()
     }
@@ -111,6 +125,9 @@ app.whenReady().then(() => {
 
   registerIpc()
   createWindow()
+
+  // 上次退出时可能留下超限的高清缓存，等图库打开后收一次
+  setTimeout(() => void pruneHighCache(true), 20000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

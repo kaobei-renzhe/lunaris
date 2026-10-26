@@ -3,6 +3,7 @@ import { existsSync, unlinkSync } from 'node:fs'
 import type { Database } from 'better-sqlite3'
 import { getDb, getIndexPath, getLibraryPath } from './db'
 import { RAW_EXT } from '../shared/formats'
+import { THUMB_SUFFIX, type ThumbQuality } from '../shared/thumbs'
 import type {
   DuplicateGroup,
   ExifData,
@@ -44,9 +45,9 @@ interface ItemRow {
   error: string | null
 }
 
-export function thumbPathFor(id: number, small = false): string {
+export function thumbPathFor(id: number, quality: ThumbQuality = 'mid'): string {
   const bucket = String(id % 100).padStart(2, '0')
-  return join(getIndexPath(), 'thumbnails', bucket, `${id}${small ? '_s' : ''}.webp`)
+  return join(getIndexPath(), 'thumbnails', bucket, `${id}${THUMB_SUFFIX[quality]}.webp`)
 }
 
 export function previewPathFor(id: number): string {
@@ -567,7 +568,7 @@ export function purgeItems(ids: number[]): void {
       delVectors.run(id)
       delAutoTags.run(id)
       delScores.run(id)
-      for (const p of [thumbPathFor(id), thumbPathFor(id, true), previewPathFor(id)]) {
+      for (const p of [thumbPathFor(id), thumbPathFor(id, 'low'), thumbPathFor(id, 'high'), previewPathFor(id)]) {
         try {
           if (existsSync(p)) unlinkSync(p)
         } catch {
@@ -589,7 +590,7 @@ export function markItemError(id: number, message: string): void {
     message.slice(0, 300),
     id
   )
-  for (const p of [thumbPathFor(id), thumbPathFor(id, true), previewPathFor(id)]) {
+  for (const p of [thumbPathFor(id), thumbPathFor(id, 'low'), thumbPathFor(id, 'high'), previewPathFor(id)]) {
     try {
       if (existsSync(p)) unlinkSync(p)
     } catch {

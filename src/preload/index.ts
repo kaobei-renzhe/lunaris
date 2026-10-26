@@ -111,6 +111,14 @@ const api: Api = {
   saveTheme: (mode) => ipcRenderer.invoke('settings:theme:save', mode),
   getSkin: () => ipcRenderer.invoke('settings:skin:get'),
   saveSkin: (id) => ipcRenderer.invoke('settings:skin:save', id),
+  getLayout: () => ipcRenderer.invoke('settings:layout:get'),
+  saveLayout: (patch) => ipcRenderer.invoke('settings:layout:save', patch),
+  getThumbQuality: () => ipcRenderer.invoke('settings:thumbQuality:get'),
+  saveThumbQuality: (quality) => ipcRenderer.invoke('settings:thumbQuality:save', quality),
+  thumbCacheStats: () => ipcRenderer.invoke('thumbs:cacheStats'),
+  clearThumbCache: (target) => ipcRenderer.invoke('thumbs:cacheClear', target),
+  getThumbCacheLimit: () => ipcRenderer.invoke('settings:thumbCacheLimit:get'),
+  saveThumbCacheLimit: (mb) => ipcRenderer.invoke('settings:thumbCacheLimit:save', mb),
   llmStatus: () => ipcRenderer.invoke('llm:status'),
   llmSaveConfig: (patch) => ipcRenderer.invoke('llm:config:save', patch),
   llmSaveKey: (key) => ipcRenderer.invoke('llm:key:save', key),
@@ -147,6 +155,11 @@ const api: Api = {
     const handler = (_e: unknown, payload: ClipProgress): void => cb(payload)
     ipcRenderer.on('clip:index-progress', handler)
     return () => ipcRenderer.removeListener('clip:index-progress', handler)
+  },
+  onClipIndexEnd: (cb: () => void) => {
+    const handler = (): void => cb()
+    ipcRenderer.on('clip:index-end', handler)
+    return () => ipcRenderer.removeListener('clip:index-end', handler)
   },
   onClipAutoStatus: (cb: (status: ClipStatus) => void) => {
     const handler = (_e: unknown, payload: ClipStatus): void => cb(payload)

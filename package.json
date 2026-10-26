@@ -1,6 +1,6 @@
 {
   "name": "image-nest",
-  "version": "0.1.30",
+  "version": "0.1.37",
   "description": "本地素材巢：图片、相机与文字的归置空间",
   "main": "./out/main/index.js",
   "author": "silvermoon",

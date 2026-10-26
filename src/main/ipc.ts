@@ -21,15 +21,21 @@ import {
   getClipAutoIndex,
   getImportOptions,
   getIndexDirFor,
+  getLayout,
   getSkin,
   getTheme,
+  getThumbCacheLimitMB,
+  getThumbQuality,
   libraryKey,
   readConfig,
   saveAutoBackup,
   saveClipAutoIndex,
   saveImportOptions,
+  saveLayout,
   saveSkin,
   saveTheme,
+  saveThumbCacheLimitMB,
+  saveThumbQuality,
   setIndexDirFor,
   updateConfig
 } from './settings'
@@ -42,6 +48,7 @@ import { startAutoClipIndex, stopAutoClipIndex } from './clip/autoIndex'
 import { applyRelocate, buildRelocatePlan, getLastRelocateDir, rememberRelocateDir } from './relocate'
 import { deleteGear, deleteKit, gearCatalog, gearScenarios, gearSuggestions, gearUsage, listGear, listKits, recommendGear, saveGear, saveKit } from './gear'
 import { startWatching, stopWatching } from './watcher'
+import { clearThumbCache, pruneHighCache, thumbCacheStats } from './thumbs'
 import { syncLibrary } from './sync'
 import { moveIndexTo } from './libraryStore'
 import {
@@ -94,6 +101,8 @@ import type {
   IndexMoveResult
 } from '../shared/types'
 import { SUPPORTED_EXT_LIST } from '../shared/formats'
+import type { LayoutSizes } from '../shared/layout'
+import type { ThumbQualityPref, ThumbCacheTarget } from '../shared/thumbs'
 import type { LlmConfig, LlmErrorCode, LlmRunOutcome } from '../shared/llm'
 import { SKINS, type SkinId } from '../shared/skins'
 
@@ -480,8 +489,8 @@ export function registerIpc(): void {
   ipcMain.on('shell:startDrag', (event, itemId: number) => {
     const file = getItemFile(itemId)
     if (!file || !existsSync(file)) return
-    const thumb = thumbPathFor(itemId, true)
-    const iconPath = existsSync(thumb) ? thumb : thumbPathFor(itemId)
+    const thumb = thumbPathFor(itemId, 'low')
+    const iconPath = existsSync(thumb) ? thumb : thumbPathFor(itemId, 'mid')
     const icon = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty()
     event.sender.startDrag({ file, icon })
   })
@@ -541,6 +550,29 @@ export function registerIpc(): void {
     return next
   })
 
+  ipcMain.handle('settings:layout:get', () => getLayout())
+
+  ipcMain.handle('settings:layout:save', (_e, patch: Partial<LayoutSizes>) => saveLayout(patch ?? {}))
+
+  ipcMain.handle('settings:thumbQuality:get', () => getThumbQuality())
+
+  ipcMain.handle('settings:thumbQuality:save', (_e, pref: ThumbQualityPref) => saveThumbQuality(pref))
+
+  ipcMain.handle('thumbs:cacheStats', () => thumbCacheStats())
+
+  ipcMain.handle('thumbs:cacheClear', (_e, target: ThumbCacheTarget) =>
+    clearThumbCache(target === 'all' ? 'all' : 'high')
+  )
+
+  ipcMain.handle('settings:thumbCacheLimit:get', () => getThumbCacheLimitMB())
+
+  ipcMain.handle('settings:thumbCacheLimit:save', async (_e, mb: number) => {
+    const limit = saveThumbCacheLimitMB(mb)
+    // 调小上限时立刻生效，不用等下次浏览触发
+    const freed = await pruneHighCache(true)
+    return { limit, freed }
+  })
+
   ipcMain.handle('settings:autoBackup:save', (_e, patch: Partial<AutoBackupSettings>) =>
     saveAutoBackup(patch)
   )
@@ -554,16 +586,20 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('clip:status', () => clipStatus())
-
   ipcMain.handle('clip:autoIndex:get', () => getClipAutoIndex())
 
   ipcMain.handle('clip:autoIndex:save', (_e, enabled: boolean) => saveClipAutoIndex(enabled))
 
   ipcMain.handle('clip:index', async () => {
     const win = activeWindow()
-    return indexEmbeddings((progress) => {
-      win?.webContents.send('clip:index-progress', progress)
-    })
+    try {
+      return await indexEmbeddings((progress) => {
+        win?.webContents.send('clip:index-progress', progress)
+      })
+    } finally {
+      // 成功、取消、异常都要让界面收起进度卡片
+      win?.webContents.send('clip:index-end')
+    }
   })
 
   ipcMain.handle('clip:cancel', () => {

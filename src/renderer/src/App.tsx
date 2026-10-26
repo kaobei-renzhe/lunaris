@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type {
@@ -22,6 +22,7 @@ import Sidebar from './components/Sidebar'
 import Toolbar from './components/Toolbar'
 import Gallery from './components/Gallery'
 import DetailPanel from './components/DetailPanel'
+import ResizeHandle from './components/ResizeHandle'
 import Lightbox from './components/Lightbox'
 import DuplicatesDialog from './components/DuplicatesDialog'
 import AutoBackupDialog from './components/AutoBackupDialog'
@@ -38,6 +39,8 @@ import Welcome from './components/Welcome'
 import { formatBytes, folderName } from './lib/format'
 import { applySkin, applyTheme, cacheSkin, cacheTheme, watchSystemTheme } from './lib/theme'
 import type { SkinId } from '@shared/skins'
+import { THUMB_QUALITY_DEFAULT, type ThumbQualityPref } from '@shared/thumbs'
+import { clamp, LAYOUT_DEFAULT, LAYOUT_LIMITS, type LayoutSizes } from '@shared/layout'
 
 const EMPTY_STATS: Stats = { total: 0, missing: 0, tags: 0, folders: 0, bytes: 0, errors: 0 }
 const PAGE = 200
@@ -65,6 +68,8 @@ export default function App() {
   const [lightboxId, setLightboxId] = useState<number | null>(null)
   const [revealTick, setRevealTick] = useState(0)
   const [thumbSize, setThumbSize] = useState(230)
+  /** 瀑布流缩略图清晰度：auto 按卡片实际像素选档，其余为强制锁定 */
+  const [thumbQuality, setThumbQuality] = useState<ThumbQualityPref>(THUMB_QUALITY_DEFAULT)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [importRunning, setImportRunning] = useState(false)
@@ -107,6 +112,8 @@ export default function App() {
   const [expandedGroups, setExpandedGroups] = useState<string[]>([])
   const [tick, setTick] = useState(0)
   const [dragging, setDragging] = useState(false)
+  /** 左栏 / 右栏宽度；拖动期间只改 CSS 变量，松手才进 state 并落盘 */
+  const [layout, setLayout] = useState<LayoutSizes>(LAYOUT_DEFAULT)
 
   const dragDepth = useRef(0)
   const itemsRef = useRef<Item[]>([])
@@ -115,6 +122,9 @@ export default function App() {
   const loadingMoreRef = useRef(false)
   const undoRef = useRef<Array<{ label: string; run: () => Promise<void> }>>([])
   const aiScoringRef = useRef(false)
+  const shellRef = useRef<HTMLDivElement>(null)
+  const layoutRef = useRef<LayoutSizes>(LAYOUT_DEFAULT)
+  const resizeRef = useRef<{ side: 'sidebar' | 'detail'; origin: number } | null>(null)
 
   filterRef.current = { ...filter, expandedGroups }
   totalRef.current = total
@@ -126,6 +136,89 @@ export default function App() {
     setSettingsTab(tab)
     setSettingsOpen(true)
   }, [])
+
+  /** 只写 CSS 变量：拖动过程中 React 不重渲染，整棵树不会跟着刷 */
+  const applyLayout = useCallback((next: LayoutSizes) => {
+    const shell = shellRef.current
+    if (!shell) return
+    shell.style.setProperty('--sidebar-w', `${next.sidebar}px`)
+    shell.style.setProperty('--detail-w', `${next.detail}px`)
+  }, [])
+
+  useEffect(() => {
+    void window.api
+      .getLayout()
+      .then((next) => {
+        layoutRef.current = next
+        setLayout(next)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    layoutRef.current = layout
+  }, [layout])
+
+  /** 按当前窗口宽度收一收两侧，保证中间图片区至少 centerMin */
+  const syncLayout = useCallback(() => {
+    const room = window.innerWidth - LAYOUT_LIMITS.centerMin - 12
+    const current = layoutRef.current
+    const sidebar = Math.min(current.sidebar, Math.max(LAYOUT_LIMITS.sidebarMin, room - current.detail))
+    const detail = Math.min(current.detail, Math.max(LAYOUT_LIMITS.detailMin, room - sidebar))
+    applyLayout({ sidebar, detail })
+  }, [applyLayout])
+
+  // 布局变化、窗口缩放、图库刚打开时都重新算一次（只改 CSS 变量，不触发重渲染）
+  useEffect(() => {
+    syncLayout()
+  }, [syncLayout, layout, library])
+
+  useEffect(() => {
+    window.addEventListener('resize', syncLayout)
+    return () => window.removeEventListener('resize', syncLayout)
+  }, [syncLayout])
+
+  const resizeLayout = useCallback(
+    (side: 'sidebar' | 'detail', delta: number) => {
+      const drag = resizeRef.current
+      if (!drag || drag.side !== side) return
+      const current = layoutRef.current
+      const room = window.innerWidth - LAYOUT_LIMITS.centerMin - 12
+      if (side === 'sidebar') {
+        const max = Math.max(
+          LAYOUT_LIMITS.sidebarMin,
+          Math.min(LAYOUT_LIMITS.sidebarMax, room - current.detail)
+        )
+        const width = Math.round(clamp(drag.origin + delta, LAYOUT_LIMITS.sidebarMin, max))
+        layoutRef.current = { ...current, sidebar: width }
+      } else {
+        const max = Math.max(
+          LAYOUT_LIMITS.detailMin,
+          Math.min(LAYOUT_LIMITS.detailMax, room - current.sidebar)
+        )
+        const width = Math.round(clamp(drag.origin - delta, LAYOUT_LIMITS.detailMin, max))
+        layoutRef.current = { ...current, detail: width }
+      }
+      applyLayout(layoutRef.current)
+    },
+    [applyLayout]
+  )
+
+  const commitResize = useCallback(() => {
+    if (!resizeRef.current) return
+    resizeRef.current = null
+    const next = layoutRef.current
+    setLayout(next)
+    void window.api.saveLayout(next).catch(() => undefined)
+  }, [])
+
+  const resetLayout = useCallback(() => {
+    resizeRef.current = null
+    layoutRef.current = LAYOUT_DEFAULT
+    setLayout(LAYOUT_DEFAULT)
+    applyLayout(LAYOUT_DEFAULT)
+    void window.api.saveLayout(LAYOUT_DEFAULT).catch(() => undefined)
+  }, [applyLayout])
 
   const applyItems = useCallback((list: Item[]) => {
     itemsRef.current = list
@@ -239,6 +332,18 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    window.api
+      .getThumbQuality()
+      .then((q) => setThumbQuality(q))
+      .catch(() => undefined)
+  }, [])
+
+  const changeThumbQuality = useCallback((pref: ThumbQualityPref) => {
+    setThumbQuality(pref)
+    void window.api.saveThumbQuality(pref).catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
     applyTheme(theme)
     return watchSystemTheme(() => {
       if (theme === 'system') applyTheme('system')
@@ -304,6 +409,15 @@ export default function App() {
   }, [library, tick])
 
   useEffect(() => window.api.onClipIndex(setClipProgress), [])
+  // 索引结束（完成 / 取消 / 出错）后收起进度卡片，并刷新侧栏的已索引数量
+  useEffect(
+    () =>
+      window.api.onClipIndexEnd(() => {
+        setClipProgress(null)
+        void window.api.clipStatus().then(setClipStatus).catch(() => undefined)
+      }),
+    []
+  )
   useEffect(() => window.api.onClipAutoStatus(setClipStatus), [])
   useEffect(() => window.api.onClipDownload(setClipDownload), [])
 
@@ -1032,7 +1146,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div ref={shellRef} className="h-full flex flex-col relative">
       <div className="flex-1 flex min-h-0">
         <Sidebar
           library={library}
@@ -1091,6 +1205,16 @@ export default function App() {
           }}
         />
 
+        <ResizeHandle
+          title="拖动调整左栏宽度，双击复位"
+          onStart={() => {
+            resizeRef.current = { side: 'sidebar', origin: layoutRef.current.sidebar }
+          }}
+          onDrag={(delta) => resizeLayout('sidebar', delta)}
+          onCommit={commitResize}
+          onReset={resetLayout}
+        />
+
         <div className="flex-1 flex flex-col min-w-0">
           <Toolbar
             filter={filter}
@@ -1135,6 +1259,7 @@ export default function App() {
             total={total}
             selectedIds={selectedIds}
             thumbSize={thumbSize}
+            quality={thumbQuality}
             loading={loading}
             loadingMore={loadingMore}
             hasMore={!similar && !semanticMode && items.length < total}
@@ -1163,6 +1288,18 @@ export default function App() {
         </div>
 
         {activeItem && (
+          <ResizeHandle
+            title="拖动调整右栏宽度，双击复位"
+            onStart={() => {
+              resizeRef.current = { side: 'detail', origin: layoutRef.current.detail }
+            }}
+            onDrag={(delta) => resizeLayout('detail', delta)}
+            onCommit={commitResize}
+            onReset={resetLayout}
+          />
+        )}
+
+        {activeItem && (
           <DetailPanel
             item={activeItem}
             tags={tags}
@@ -1188,23 +1325,6 @@ export default function App() {
           <div className="px-10 py-8 rounded-2xl border-2 border-dashed border-[var(--accent)] text-center">
             <div className="text-[16px] text-[var(--accent-2)] font-medium">松手就收进月巢</div>
             <div className="text-[12px] text-[var(--muted)] mt-1">支持文件夹递归导入</div>
-          </div>
-        </div>
-      )}
-
-      {progress && progress.total > 0 && !importRunning && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 w-[360px] rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 shadow-2xl">
-          <div className="flex items-center justify-between text-[12px] mb-2">
-            <span className="text-[var(--muted)] truncate pr-3">正在索引 {progress.current || '…'}</span>
-            <span className="text-[var(--text)] tabular-nums">
-              {progress.done}/{progress.total}
-            </span>
-          </div>
-          <div className="h-[4px] rounded-full bg-[var(--panel-3)] overflow-hidden">
-            <div
-              className="h-full bg-[var(--accent)] transition-[width] duration-200"
-              style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
-            />
           </div>
         </div>
       )}
@@ -1260,7 +1380,7 @@ export default function App() {
           <div className="absolute bottom-[86px] left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--panel)] px-3 py-1.5 shadow-2xl">
             <span className="text-[11.5px] text-[var(--muted)]">语义索引</span>
             <span className="text-[11.5px] text-[var(--text)] tabular-nums">
-              {clipProgress.done}/{clipProgress.total}
+              {clipProgress.total ? `${clipProgress.done}/${clipProgress.total}` : '准备中…'}
               {clipProgress.total
                 ? ` · ${Math.round((clipProgress.done / clipProgress.total) * 100)}%`
                 : ''}
@@ -1277,11 +1397,11 @@ export default function App() {
           <div className="absolute bottom-[86px] left-1/2 -translate-x-1/2 z-40 w-[360px] rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 shadow-2xl">
             <div className="flex items-center justify-between text-[12px] mb-2">
               <span className="text-[var(--muted)] truncate pr-3">
-                语义索引 {clipProgress.current || ''}
+                语义索引 {clipProgress.current || (clipProgress.total ? '' : '准备中…')}
               </span>
               <span className="flex items-center gap-1 shrink-0">
                 <span className="text-[var(--text)] tabular-nums">
-                  {clipProgress.done}/{clipProgress.total}
+                  {clipProgress.total ? `${clipProgress.done}/${clipProgress.total}` : '—'}
                 </span>
                 <button
                   className="btn btn-ghost h-5 px-1"
@@ -1420,6 +1540,8 @@ export default function App() {
           onChange={changeTheme}
           skin={skin}
           onSkin={changeSkin}
+          thumbQuality={thumbQuality}
+          onThumbQuality={changeThumbQuality}
           onClose={() => setSettingsOpen(false)}
           initialTab={settingsTab}
         />

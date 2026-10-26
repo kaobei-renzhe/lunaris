@@ -3,6 +3,7 @@ import {
   Check,
   Cpu,
   HardDrive,
+  Image as ImageIcon,
   Monitor,
   Moon,
   Palette,
@@ -14,6 +15,14 @@ import {
 import type { LibraryStorage, ThemeMode } from '@shared/types'
 import type { LlmConfig, LlmStatus, LlmTestResult } from '@shared/llm'
 import { findSkin, SKINS, type SkinId } from '@shared/skins'
+import {
+  THUMB_CACHE_LIMIT_DEFAULT,
+  THUMB_CACHE_LIMIT_OPTIONS,
+  THUMB_QUALITY_OPTIONS,
+  type ThumbCacheStats,
+  type ThumbQualityPref
+} from '@shared/thumbs'
+import { formatBytes } from '../lib/format'
 
 /** 设置面板的左侧分类 */
 export type SettingsTab = 'appearance' | 'llm' | 'semantic' | 'storage'
@@ -23,6 +32,9 @@ interface SettingsDialogProps {
   onChange: (mode: ThemeMode) => void
   skin: SkinId
   onSkin: (id: SkinId) => void
+  /** 瀑布流缩略图清晰度，改完立即生效 */
+  thumbQuality: ThumbQualityPref
+  onThumbQuality: (pref: ThumbQualityPref) => void
   onClose: () => void
   /** 打开时默认停在哪个分类（AI 弹窗的「去设置」直接落到大模型） */
   initialTab?: SettingsTab
@@ -51,6 +63,8 @@ export default function SettingsDialog({
   onChange,
   skin,
   onSkin,
+  thumbQuality,
+  onThumbQuality,
   onClose,
   initialTab = 'appearance'
 }: SettingsDialogProps) {
@@ -67,6 +81,11 @@ export default function SettingsDialog({
   const [storage, setStorage] = useState<LibraryStorage | null>(null)
   const [indexBusy, setIndexBusy] = useState(false)
   const [indexMsg, setIndexMsg] = useState<string | null>(null)
+  const [thumbStats, setThumbStats] = useState<ThumbCacheStats | null>(null)
+  const [thumbBusy, setThumbBusy] = useState(false)
+  const [thumbMsg, setThumbMsg] = useState<string | null>(null)
+  const [thumbLimit, setThumbLimit] = useState<number | null>(null)
+  const [limitBusy, setLimitBusy] = useState(false)
 
   useEffect(() => {
     void window.api
@@ -81,7 +100,66 @@ export default function SettingsDialog({
       .getLibraryStorage()
       .then(setStorage)
       .catch(() => setStorage(null))
+    void window.api
+      .thumbCacheStats()
+      .then(setThumbStats)
+      .catch(() => setThumbStats(null))
+    void window.api
+      .getThumbCacheLimit()
+      .then(setThumbLimit)
+      .catch(() => setThumbLimit(THUMB_CACHE_LIMIT_DEFAULT))
   }, [])
+
+  const limitLabel = (mb: number): string =>
+    THUMB_CACHE_LIMIT_OPTIONS.find((option) => option.value === mb)?.label ?? `${mb} MB`
+
+  /** 改上限：调小时主进程会立刻按最久未用淘汰一次 */
+  const changeLimit = async (mb: number): Promise<void> => {
+    if (limitBusy) return
+    setLimitBusy(true)
+    setThumbMsg(null)
+    try {
+      const result = await window.api.saveThumbCacheLimit(mb)
+      setThumbLimit(result.limit)
+      setThumbStats(await window.api.thumbCacheStats())
+      setThumbMsg(
+        result.freed > 0
+          ? `上限已设为 ${limitLabel(result.limit)}，顺带清理了 ${formatBytes(result.freed)}`
+          : `上限已设为 ${limitLabel(result.limit)}`
+      )
+    } catch {
+      setThumbMsg('设置上限失败，稍后再试')
+    } finally {
+      setLimitBusy(false)
+    }
+  }
+
+  /** 清理缩略图缓存：high 只删高清档，all 连中/低档一起删 */
+  const clearThumbs = async (target: 'high' | 'all'): Promise<void> => {
+    if (thumbBusy) return
+    if (target === 'all') {
+      const ok = await window.api.confirm(
+        '删除全部缩略图缓存？',
+        '低 / 中 / 高三档都会被删掉，之后按需重新生成。图库很大时首次浏览会明显变慢，原图不受影响。'
+      )
+      if (!ok) return
+    }
+    setThumbBusy(true)
+    setThumbMsg(null)
+    try {
+      const result = await window.api.clearThumbCache(target)
+      setThumbMsg(
+        result.removed > 0
+          ? `已清理 ${result.removed} 个文件，释放 ${formatBytes(result.freed)}`
+          : '没有需要清理的文件'
+      )
+      setThumbStats(await window.api.thumbCacheStats())
+    } catch {
+      setThumbMsg('清理失败，稍后再试')
+    } finally {
+      setThumbBusy(false)
+    }
+  }
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -311,6 +389,45 @@ export default function SettingsDialog({
                   </div>
                   <div className="mt-2 text-[11px] leading-4 text-[var(--faint)]">
                     「{activeSkin.name}」已应用。除「经典」外，其余风格会固定深/浅，上方的主题开关对它们不起作用。
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[12.5px] mb-2">照片清晰度</div>
+                  <div className="space-y-1.5">
+                    {THUMB_QUALITY_OPTIONS.map((item) => {
+                      const active = item.id === thumbQuality
+                      return (
+                        <button
+                          key={item.id}
+                          className={`w-full flex items-start gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                            active
+                              ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+                              : 'border-[var(--border)] bg-[var(--panel-2)] hover:border-[var(--border-strong)]'
+                          }`}
+                          onClick={() => onThumbQuality(item.id)}
+                        >
+                          <ImageIcon
+                            size={14}
+                            className="mt-0.5 shrink-0"
+                            color={active ? 'var(--accent-2)' : 'var(--muted)'}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className={`text-[12px] ${active ? 'text-[var(--accent-text)]' : 'text-[var(--text)]'}`}
+                            >
+                              {item.label}
+                            </span>
+                            <div className="mt-0.5 text-[10.5px] leading-4 text-[var(--faint)]">{item.hint}</div>
+                          </div>
+                          {active && <Check size={13} color="var(--accent-2)" className="mt-0.5 shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-2 text-[11px] leading-4 text-[var(--faint)]">
+                    只影响瀑布流里的小图，点开来看的始终是原图。选「自动」会按卡片大小和屏幕像素密度挑档，
+                    缩略图拉大或竖构图自动上高清；切换后立刻重新加载，偏好自动记住。
                   </div>
                 </div>
               </>
@@ -656,6 +773,75 @@ export default function SettingsDialog({
                     )}
                   </div>
                 )}
+
+                <div className="mt-1">
+                  <div className="text-[12.5px] mb-2">缩略图缓存</div>
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5 space-y-2">
+                    {!thumbStats ? (
+                      <div className="text-[11px] text-[var(--faint)]">统计中…</div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { label: '低 260px', data: thumbStats.low },
+                            { label: '中 720px', data: thumbStats.mid },
+                            { label: '高 1440px', data: thumbStats.high }
+                          ].map(({ label, data }) => (
+                            <div key={label}>
+                              <div className="text-[10.5px] text-[var(--faint)]">{label}</div>
+                              <div className="text-[11.5px] text-[var(--text)] tabular-nums">
+                                {formatBytes(data.bytes)}
+                              </div>
+                              <div className="text-[10px] text-[var(--faint)] tabular-nums">{data.count} 张</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2 pt-0.5">
+                          <span className="text-[11px] text-[var(--muted)]">高清上限</span>
+                          <select
+                            className="input h-7 px-1.5 text-[11.5px] ml-auto"
+                            value={thumbLimit ?? THUMB_CACHE_LIMIT_DEFAULT}
+                            onChange={(e) => void changeLimit(Number(e.target.value))}
+                            disabled={limitBusy || thumbLimit === null}
+                            title="超过上限时自动删最久没看的高清图"
+                          >
+                            {THUMB_CACHE_LIMIT_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            className="btn h-7 px-2 text-[11.5px]"
+                            disabled={thumbBusy || thumbStats.high.count === 0}
+                            onClick={() => void clearThumbs('high')}
+                            title="只删 1440px 那档，日常浏览不受影响"
+                          >
+                            {thumbBusy ? '清理中…' : '清理高清缓存'}
+                          </button>
+                          <button
+                            className="btn btn-ghost h-7 px-2 text-[11.5px]"
+                            disabled={thumbBusy}
+                            onClick={() => void clearThumbs('all')}
+                            title="三档全删，之后按需重新生成"
+                          >
+                            全部重建
+                          </button>
+                        </div>
+                        <div className="text-[10.5px] leading-4 text-[var(--faint)]">
+                          高清档是「自动」清晰度按需生成的，清掉它最划算；清完后正在看的画面会重新生成。
+                          超过上限时自动淘汰最久没看的高清图，中/低档不动。想长期省磁盘，先把清晰度锁成
+                          「低」或「中」再清。「全部重建」连中/低档一起删，大图库首次滚动会明显变慢。原图始终不动。
+                        </div>
+                        {thumbMsg && (
+                          <div className="text-[10.5px] leading-4 text-[var(--accent-text)]">{thumbMsg}</div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
               </>
             )}
           </div>

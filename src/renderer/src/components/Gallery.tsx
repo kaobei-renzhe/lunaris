@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent } from 'react'
 import { ImagePlus, Sparkles, TriangleAlert } from 'lucide-react'
 import type { Item } from '@shared/types'
+import { pickThumbQuality, type ThumbQuality, type ThumbQualityPref } from '@shared/thumbs'
 import { RAW_EXT } from '@shared/formats'
 import { scoreColor, thumbUrl } from '../lib/format'
 
@@ -13,6 +14,8 @@ interface GalleryProps {
   total: number
   selectedIds: number[]
   thumbSize: number
+  /** 瀑布流缩略图清晰度：auto 按卡片实际像素选档，其余为强制锁定 */
+  quality: ThumbQualityPref
   loading: boolean
   loadingMore: boolean
   hasMore: boolean
@@ -39,7 +42,7 @@ interface Box {
 const Card = memo(function Card({
   item,
   box,
-  small,
+  quality,
   selected,
   expanded,
   onSelect,
@@ -49,7 +52,7 @@ const Card = memo(function Card({
 }: {
   item: Item
   box: Box
-  small: boolean
+  quality: ThumbQuality
   selected: boolean
   expanded: boolean
   onSelect: (id: number, e: ReactMouseEvent) => void
@@ -57,6 +60,26 @@ const Card = memo(function Card({
   onDragStart: (id: number, e: ReactDragEvent) => void
   onExpandGroup: (key: string) => void
 }) {
+  const src = thumbUrl(item.id, quality)
+  // 切档时先预加载新图、加载完成再换 src，旧图一直留在屏幕上，不会闪白
+  const [shown, setShown] = useState(src)
+  useEffect(() => {
+    if (src === shown) return
+    let cancelled = false
+    const loader = new Image()
+    const commit = (): void => {
+      if (!cancelled) setShown(src)
+    }
+    loader.onload = commit
+    loader.onerror = commit
+    loader.src = src
+    return () => {
+      cancelled = true
+      loader.onload = null
+      loader.onerror = null
+    }
+  }, [src, shown])
+
   return (
     <div
       className={`card-thumb group ${selected ? 'selected' : ''}`}
@@ -76,7 +99,7 @@ const Card = memo(function Card({
         </div>
       ) : (
         <img
-          src={thumbUrl(item.id, small)}
+          src={shown}
           alt={item.name}
           loading="lazy"
           decoding="async"
@@ -169,6 +192,7 @@ export default function Gallery({
   total,
   selectedIds,
   thumbSize,
+  quality,
   loading,
   loadingMore,
   hasMore,
@@ -187,6 +211,20 @@ export default function Gallery({
   const sentinelRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
   const [scrollTop, setScrollTop] = useState(0)
+
+  // 一块缩略图要喂多少像素取决于屏幕密度，换显示器/改缩放时跟着重算
+  const [dpr, setDpr] = useState(() => window.devicePixelRatio || 1)
+  useEffect(() => {
+    const update = (): void => setDpr(window.devicePixelRatio || 1)
+    const query = window.matchMedia(`(resolution: ${dpr}dppx)`)
+    query.addEventListener('change', update)
+    // 有些环境（缩放、远程桌面）只发 resize 不发 media query 变化
+    window.addEventListener('resize', update)
+    return () => {
+      query.removeEventListener('change', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [dpr])
 
   // 空状态时不会渲染滚动容器，因此有数据后需要重新绑定观察器
   useEffect(() => {
@@ -279,6 +317,18 @@ export default function Gallery({
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
 
+  /**
+   * 自动档：按 contain 之后的真实显示尺寸 × 屏幕密度挑够用的档。
+   * 竖构图的横向像素只有长边的 w/h，必须按显示后的长边算，不能只看卡片宽度。
+   */
+  const qualityFor = (item: Item, box: Box): ThumbQuality => {
+    if (quality !== 'auto') return quality
+    const ratio = item.width > 0 && item.height > 0 ? item.width / item.height : box.w / box.h
+    const shownW = Math.min(box.w, box.h * ratio)
+    const shownH = shownW / ratio
+    return pickThumbQuality(Math.max(shownW, shownH) * dpr)
+  }
+
   const handleDragStart = (id: number, e: ReactDragEvent): void => {
     // Alt + 拖拽交给系统原生拖拽，可以直接拖进资源管理器或其它应用
     if (e.altKey) {
@@ -326,7 +376,7 @@ export default function Gallery({
             key={item.id}
             item={item}
             box={box}
-            small={thumbSize <= 260}
+            quality={qualityFor(item, box)}
             selected={selectedSet.has(item.id)}
             expanded={!!item.groupKey && expandedGroups.includes(item.groupKey)}
             onSelect={onSelect}
