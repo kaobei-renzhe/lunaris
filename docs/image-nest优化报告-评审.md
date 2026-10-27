@@ -1,5 +1,7 @@
 # 《image-nest 优化与功能增强报告》评审与优化建议
 
+> 说明：本文写于改名之前，文中「image-nest」「月巢」指同一项目，现名「月相 / Lunaris」；GitHub 仓库地址仍是 `moonnest`。
+
 > 评审对象：`e:\workbuddy_store\工作\image-nest优化与功能增强报告.md`
 > 评审基准代码：`E:\trae_projects\image-nest`，`package.json` 版本 0.1.14
 > 评审方式：逐条回到源码与 `release/win-unpacked` 产物核对，不采信报告的自述结论
