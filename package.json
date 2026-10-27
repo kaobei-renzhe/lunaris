@@ -1,6 +1,6 @@
 {
   "name": "lunaris",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "本地优先的图片素材库：照片、相机与文字都归在这里",
   "main": "./out/main/index.js",
   "author": "silvermoon",
