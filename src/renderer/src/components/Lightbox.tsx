@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import { ChevronLeft, ChevronRight, Minus, Plus, RotateCcw, RotateCw, X } from 'lucide-react'
 import type { Item } from '@shared/types'
 import { photoUrl } from '../lib/format'
+import { pickSpatialNeighbor, type NavBox } from '../lib/spatialNav'
 
 interface LightboxProps {
   items: Item[]
@@ -16,6 +17,28 @@ const FIT_PADDING = 48
 /** 相对原图的最大放大倍率（按屏幕物理像素算，8 倍已经能看清单个像素） */
 const MAX_ZOOM = 8
 const MIN_ZOOM = 0.02
+
+type Direction = 'up' | 'down' | 'left' | 'right'
+
+/** 从瀑布流里已渲染的卡片中找当前项在某个方向上的邻居 */
+function spatialNeighbor(id: number, direction: Direction): number | null {
+  const current = document.querySelector<HTMLElement>(`[data-gallery-id="${id}"]`)
+  if (!current) return null
+  const toBox = (el: Element): NavBox => {
+    const rect = el.getBoundingClientRect()
+    return {
+      id: Number((el as HTMLElement).dataset.galleryId),
+      x: rect.left,
+      y: rect.top,
+      w: rect.width,
+      h: rect.height
+    }
+  }
+  const others = Array.from(document.querySelectorAll('[data-gallery-id]')).filter(
+    (el) => el !== current
+  )
+  return pickSpatialNeighbor(toBox(current), others.map(toBox), direction)
+}
 
 export default function Lightbox({ items, index, onClose, onNavigate }: LightboxProps) {
   const item = items[index]
@@ -47,7 +70,8 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
     return Math.min(1, Math.max(MIN_ZOOM, raw))
   }, [shownW, shownH, viewport.w, viewport.h])
 
-  const zoom = manualZoom === null ? fitScale : Math.max(manualZoom, fitScale)
+  /** 手动缩放允许小于「适应窗口」，方便整图缩小对比；下限仍是 MIN_ZOOM */
+  const zoom = manualZoom === null ? fitScale : Math.max(MIN_ZOOM, manualZoom)
   /**
    * 屏幕缩放比；100% 指 1 个图像像素铺满 1 个物理像素，高分屏上才不会看着发虚。
    * 拖到另一块不同缩放的显示器时要跟着更新。
@@ -86,7 +110,7 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
       const rect = stage.getBoundingClientRect()
       const { zoom: prev, pan: prevPan } = liveRef.current
       if (prev <= 0) return
-      const next = Math.min(maxZoom, Math.max(fitScale, target))
+      const next = Math.min(maxZoom, Math.max(MIN_ZOOM, target))
       if (Math.abs(next - prev) < 1e-4) return
       const mx = clientX - rect.left - rect.width / 2
       const my = clientY - rect.top - rect.height / 2
@@ -98,7 +122,7 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
       setManualZoom(next)
       setPan(nextPan)
     },
-    [clampPan, fitScale, maxZoom, natural.w]
+    [clampPan, maxZoom, natural.w]
   )
 
   const zoomCenter = useCallback(
@@ -161,12 +185,30 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'ArrowLeft') {
-        if (index > 0) onNavigate(index - 1)
-        return
-      }
-      if (e.key === 'ArrowRight') {
-        if (index < items.length - 1) onNavigate(index + 1)
+      // 方向键按瀑布流的实际位置走：↑↓ 同列上下，←→ 跨列
+      const arrow: Direction | null =
+        e.key === 'ArrowLeft'
+          ? 'left'
+          : e.key === 'ArrowRight'
+            ? 'right'
+            : e.key === 'ArrowUp'
+              ? 'up'
+              : e.key === 'ArrowDown'
+                ? 'down'
+                : null
+      if (arrow) {
+        e.preventDefault()
+        const currentId = item?.id
+        const neighbor = currentId === undefined ? null : spatialNeighbor(currentId, arrow)
+        const neighborIndex =
+          neighbor === null ? -1 : items.findIndex((i) => i.id === neighbor)
+        if (neighborIndex >= 0) {
+          onNavigate(neighborIndex)
+          return
+        }
+        // 相邻卡片还没进入渲染窗口（虚拟化）时，退回按顺序翻页
+        const step = arrow === 'left' || arrow === 'up' ? -1 : 1
+        if (index + step >= 0 && index + step < items.length) onNavigate(index + step)
         return
       }
       if (e.key === 'r' || e.key === 'R') {
@@ -186,7 +228,7 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [index, items.length, onNavigate, resetFit, rotateBy, zoomStep])
+  }, [index, items, item?.id, onNavigate, resetFit, rotateBy, zoomStep])
 
   if (!item) return null
 
@@ -347,7 +389,7 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
         {item.exif?.aperture && <span>{item.exif.aperture}</span>}
         {item.exif?.shutter && <span>{item.exif.shutter}</span>}
         {item.exif?.iso && <span>ISO {item.exif.iso}</span>}
-        <span className="ml-auto truncate">滚轮缩放 · 双击 100% · R 旋转 · ← → 切换 · Esc 关闭</span>
+        <span className="ml-auto truncate">滚轮缩放 · 双击 100% · R 旋转 · ↑↓←→ 切换 · Esc 关闭</span>
         <div className="flex items-center gap-1 shrink-0">
           <button
             className="w-6 h-6 rounded grid place-items-center hover:bg-white/12 text-white/70"

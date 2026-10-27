@@ -1118,7 +1118,7 @@ export default function App() {
             loadingMore={loadingMore}
             hasMore={!similar && !semanticMode && items.length < total}
             resetKey={listResetKey}
-            focusId={activeId}
+            focusId={lightboxId ?? activeId}
             focusTick={revealTick}
             expandedGroups={expandedGroups}
             onExpandGroup={toggleGroup}

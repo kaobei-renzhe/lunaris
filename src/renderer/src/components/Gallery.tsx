@@ -84,6 +84,7 @@ const Card = memo(function Card({
     <div
       className={`card-thumb group ${selected ? 'selected' : ''}`}
       style={{ position: 'absolute', left: box.x, top: box.y, width: box.w, height: box.h }}
+      data-gallery-id={item.id}
       draggable
       onDragStart={(e) => onDragStart(item.id, e)}
       onClick={(e) => onSelect(item.id, e)}

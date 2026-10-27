@@ -4,6 +4,7 @@ import type { Database } from 'better-sqlite3'
 import { getDb, getIndexPath, getLibraryPath } from './db'
 import { RAW_EXT } from '../shared/formats'
 import { THUMB_SUFFIX, type ThumbQuality } from '../shared/thumbs'
+import { FLAG_FILTER_NOT_PICKED, FLAG_FILTER_NOT_REJECTED } from '../shared/types'
 import type {
   DuplicateGroup,
   ExifData,
@@ -285,8 +286,12 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
     }
   }
   if (filter.flag) {
-    where.push('i.flag = ?')
-    params.push(filter.flag)
+    if (filter.flag === FLAG_FILTER_NOT_REJECTED) where.push('i.flag >= 0')
+    else if (filter.flag === FLAG_FILTER_NOT_PICKED) where.push('i.flag = 0')
+    else {
+      where.push('i.flag = ?')
+      params.push(filter.flag)
+    }
   }
 
   if (filter.minRating && filter.minRating > 0) {

@@ -47,6 +47,15 @@ export type ColorFamily =
 
 export type Orientation = 'landscape' | 'portrait' | 'square'
 
+/**
+ * 旗标筛选取值：0 = 不限，>0 = 留用，<0 = 淘汰。
+ * 下面两个是负向筛选，用不会和旗标值冲突的正数表示：
+ * - FLAG_FILTER_NOT_REJECTED：非淘汰（留用 + 未标记）
+ * - FLAG_FILTER_NOT_PICKED：非留用（只含未标记，明确排除淘汰）
+ */
+export const FLAG_FILTER_NOT_REJECTED = 2
+export const FLAG_FILTER_NOT_PICKED = 3
+
 export interface FilterState {
   query?: string
   tagIds?: number[]

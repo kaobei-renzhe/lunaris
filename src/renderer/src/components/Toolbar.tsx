@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react'
 import type { ClipStatus, FilterState, Folder } from '@shared/types'
+import { FLAG_FILTER_NOT_PICKED, FLAG_FILTER_NOT_REJECTED } from '@shared/types'
 import { COLOR_OPTIONS } from '../lib/format'
 
 interface ToolbarProps {
@@ -259,6 +260,8 @@ export default function Toolbar({
           <option value={0}>全部旗标</option>
           <option value={1}>✓ 留用</option>
           <option value={-1}>✕ 淘汰</option>
+          <option value={FLAG_FILTER_NOT_REJECTED}>— 非淘汰</option>
+          <option value={FLAG_FILTER_NOT_PICKED}>— 非留用</option>
         </select>
 
         {aiReady && canSmartFilter && (
