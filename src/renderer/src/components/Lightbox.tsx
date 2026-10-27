@@ -3,7 +3,6 @@ import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent }
 import { ChevronLeft, ChevronRight, Minus, Plus, RotateCcw, RotateCw, X } from 'lucide-react'
 import type { Item } from '@shared/types'
 import { photoUrl } from '../lib/format'
-import { pickSpatialNeighbor, type NavBox } from '../lib/spatialNav'
 
 interface LightboxProps {
   items: Item[]
@@ -17,28 +16,6 @@ const FIT_PADDING = 48
 /** 相对原图的最大放大倍率（按屏幕物理像素算，8 倍已经能看清单个像素） */
 const MAX_ZOOM = 8
 const MIN_ZOOM = 0.02
-
-type Direction = 'up' | 'down' | 'left' | 'right'
-
-/** 从瀑布流里已渲染的卡片中找当前项在某个方向上的邻居 */
-function spatialNeighbor(id: number, direction: Direction): number | null {
-  const current = document.querySelector<HTMLElement>(`[data-gallery-id="${id}"]`)
-  if (!current) return null
-  const toBox = (el: Element): NavBox => {
-    const rect = el.getBoundingClientRect()
-    return {
-      id: Number((el as HTMLElement).dataset.galleryId),
-      x: rect.left,
-      y: rect.top,
-      w: rect.width,
-      h: rect.height
-    }
-  }
-  const others = Array.from(document.querySelectorAll('[data-gallery-id]')).filter(
-    (el) => el !== current
-  )
-  return pickSpatialNeighbor(toBox(current), others.map(toBox), direction)
-}
 
 export default function Lightbox({ items, index, onClose, onNavigate }: LightboxProps) {
   const item = items[index]
@@ -185,30 +162,15 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      // 方向键按瀑布流的实际位置走：↑↓ 同列上下，←→ 跨列
-      const arrow: Direction | null =
-        e.key === 'ArrowLeft'
-          ? 'left'
-          : e.key === 'ArrowRight'
-            ? 'right'
-            : e.key === 'ArrowUp'
-              ? 'up'
-              : e.key === 'ArrowDown'
-                ? 'down'
-                : null
-      if (arrow) {
+      // 灯箱只认左右键：按当前顺序翻页
+      if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        const currentId = item?.id
-        const neighbor = currentId === undefined ? null : spatialNeighbor(currentId, arrow)
-        const neighborIndex =
-          neighbor === null ? -1 : items.findIndex((i) => i.id === neighbor)
-        if (neighborIndex >= 0) {
-          onNavigate(neighborIndex)
-          return
-        }
-        // 相邻卡片还没进入渲染窗口（虚拟化）时，退回按顺序翻页
-        const step = arrow === 'left' || arrow === 'up' ? -1 : 1
-        if (index + step >= 0 && index + step < items.length) onNavigate(index + step)
+        if (index > 0) onNavigate(index - 1)
+        return
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        if (index < items.length - 1) onNavigate(index + 1)
         return
       }
       if (e.key === 'r' || e.key === 'R') {
@@ -228,7 +190,7 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [index, items, item?.id, onNavigate, resetFit, rotateBy, zoomStep])
+  }, [index, items.length, onNavigate, resetFit, rotateBy, zoomStep])
 
   if (!item) return null
 
@@ -389,7 +351,7 @@ export default function Lightbox({ items, index, onClose, onNavigate }: Lightbox
         {item.exif?.aperture && <span>{item.exif.aperture}</span>}
         {item.exif?.shutter && <span>{item.exif.shutter}</span>}
         {item.exif?.iso && <span>ISO {item.exif.iso}</span>}
-        <span className="ml-auto truncate">滚轮缩放 · 双击 100% · R 旋转 · ↑↓←→ 切换 · Esc 关闭</span>
+        <span className="ml-auto truncate">滚轮缩放 · 双击 100% · R 旋转 · ← → 切换 · Esc 关闭</span>
         <div className="flex items-center gap-1 shrink-0">
           <button
             className="w-6 h-6 rounded grid place-items-center hover:bg-white/12 text-white/70"

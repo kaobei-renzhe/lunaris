@@ -23,6 +23,7 @@ import Gallery from './components/Gallery'
 import DetailPanel from './components/DetailPanel'
 import ResizeHandle from './components/ResizeHandle'
 import Lightbox from './components/Lightbox'
+import { findRenderedNeighbor, type Direction } from './lib/spatialNav'
 import DuplicatesDialog from './components/DuplicatesDialog'
 import AutoBackupDialog from './components/AutoBackupDialog'
 import AutoTagDialog from './components/AutoTagDialog'
@@ -635,6 +636,24 @@ export default function App() {
     [activeId]
   )
 
+  /** 方向键：按瀑布流卡片的真实位置走（↑↓ 同列、←→ 跨列），找不到邻居时退回顺序移动 */
+  const moveSelectionBy = useCallback(
+    (direction: Direction) => {
+      const list = itemsRef.current
+      const currentId = activeId ?? selectedIds[0]
+      if (!list.length || !currentId) return
+      const neighbor = findRenderedNeighbor(currentId, direction)
+      const index = neighbor === null ? -1 : list.findIndex((item) => item.id === neighbor)
+      if (index >= 0) {
+        setActiveId(list[index].id)
+        setSelectedIds([list[index].id])
+        return
+      }
+      moveSelection(direction === 'up' || direction === 'left' ? -1 : 1)
+    },
+    [activeId, selectedIds, moveSelection]
+  )
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const el = document.activeElement as HTMLElement | null
@@ -700,12 +719,28 @@ export default function App() {
         void setFlagSelected(0)
         return
       }
-      if (e.key === 'j' || e.key === 'ArrowDown') {
+      // 方向键按瀑布流实际位置走；j / k 仍保持顺序切换
+      const arrow: Direction | null =
+        e.key === 'ArrowLeft'
+          ? 'left'
+          : e.key === 'ArrowRight'
+            ? 'right'
+            : e.key === 'ArrowUp'
+              ? 'up'
+              : e.key === 'ArrowDown'
+                ? 'down'
+                : null
+      if (arrow) {
+        e.preventDefault()
+        moveSelectionBy(arrow)
+        return
+      }
+      if (e.key === 'j') {
         e.preventDefault()
         moveSelection(1)
         return
       }
-      if (e.key === 'k' || e.key === 'ArrowUp') {
+      if (e.key === 'k') {
         e.preventDefault()
         moveSelection(-1)
         return
@@ -727,6 +762,7 @@ export default function App() {
     rateSelected,
     setFlagSelected,
     moveSelection,
+    moveSelectionBy,
     undoLast,
     notify
   ])

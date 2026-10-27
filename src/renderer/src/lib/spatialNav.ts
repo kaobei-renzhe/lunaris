@@ -43,3 +43,23 @@ export function pickSpatialNeighbor(
   }
   return bestId
 }
+
+/** 从瀑布流里已渲染的卡片（data-gallery-id）中找邻居；目标没渲染时返回 null */
+export function findRenderedNeighbor(id: number, direction: Direction): number | null {
+  const current = document.querySelector<HTMLElement>(`[data-gallery-id="${id}"]`)
+  if (!current) return null
+  const toBox = (el: Element): NavBox => {
+    const rect = el.getBoundingClientRect()
+    return {
+      id: Number((el as HTMLElement).dataset.galleryId),
+      x: rect.left,
+      y: rect.top,
+      w: rect.width,
+      h: rect.height
+    }
+  }
+  const others = Array.from(document.querySelectorAll('[data-gallery-id]')).filter(
+    (el) => el !== current
+  )
+  return pickSpatialNeighbor(toBox(current), others.map(toBox), direction)
+}
