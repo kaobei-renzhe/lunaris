@@ -21,16 +21,13 @@ export function clamp(value: number, min: number, max: number): number {
 
 /** 把存下来的宽度收进合法范围；配置文件被手改也不会把界面搞崩 */
 export function normalizeLayout(input: Partial<LayoutSizes> | undefined): LayoutSizes {
+  // 配置文件可能被手改成字符串或 NaN，先挡掉再取整
+  const pick = (value: unknown, fallback: number, min: number, max: number): number => {
+    const num = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : fallback
+    return clamp(num, min, max)
+  }
   return {
-    sidebar: clamp(
-      Math.round(input?.sidebar ?? LAYOUT_DEFAULT.sidebar),
-      LAYOUT_LIMITS.sidebarMin,
-      LAYOUT_LIMITS.sidebarMax
-    ),
-    detail: clamp(
-      Math.round(input?.detail ?? LAYOUT_DEFAULT.detail),
-      LAYOUT_LIMITS.detailMin,
-      LAYOUT_LIMITS.detailMax
-    )
+    sidebar: pick(input?.sidebar, LAYOUT_DEFAULT.sidebar, LAYOUT_LIMITS.sidebarMin, LAYOUT_LIMITS.sidebarMax),
+    detail: pick(input?.detail, LAYOUT_DEFAULT.detail, LAYOUT_LIMITS.detailMin, LAYOUT_LIMITS.detailMax)
   }
 }

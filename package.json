@@ -1,6 +1,6 @@
 {
   "name": "image-nest",
-  "version": "0.1.37",
+  "version": "0.1.40",
   "description": "本地素材巢：图片、相机与文字的归置空间",
   "main": "./out/main/index.js",
   "author": "silvermoon",
@@ -42,6 +42,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "bench": "node scripts/bench.mjs",
     "dist": "electron-vite build && electron-builder --win --publish never && node scripts/clean-release.mjs"
   },
@@ -66,6 +67,7 @@
     "electron-vite": "^6.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
   }
 }

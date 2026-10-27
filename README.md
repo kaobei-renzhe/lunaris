@@ -87,6 +87,7 @@
 npm install
 npm run dev        # 开发模式
 npm run typecheck  # 类型检查
+npm test           # 单元测试（vitest）
 npm run build      # 构建到 out/
 npm run dist       # 构建并打包 Windows 安装包到 release/
 ```
