@@ -2,8 +2,8 @@ import type { ThemeMode } from '@shared/types'
 import type { SkinId } from '@shared/skins'
 
 const DARK_QUERY = '(prefers-color-scheme: dark)'
-const CACHE_KEY = 'moonnest:theme'
-const SKIN_KEY = 'moonnest:skin'
+const CACHE_KEY = 'lunaris:theme'
+const SKIN_KEY = 'lunaris:skin'
 
 export function resolveTheme(mode: ThemeMode): 'dark' | 'light' {
   if (mode === 'dark' || mode === 'light') return mode

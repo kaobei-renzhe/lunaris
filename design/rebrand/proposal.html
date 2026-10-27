@@ -1,0 +1,1432 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>改名与图标提案 · image-nest</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 56px 40px 76px;
+    background: #090A0C; color: #E8EDF5;
+    font: 14px/1.75 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; }
+  header { margin-bottom: 40px; }
+  .kicker { font-size: 11.5px; letter-spacing: .26em; color: #5E6879; text-transform: uppercase; }
+  h1 { font-size: 30px; font-weight: 600; margin: 12px 0 10px; letter-spacing: .01em; }
+  h1 span { color: #55606F; font-weight: 400; }
+  header p { margin: 0; color: #7A8496; font-size: 13.5px; max-width: 680px; }
+
+  .before {
+    display: flex; align-items: center; gap: 30px;
+    margin: 32px 0 6px; padding: 22px 26px;
+    background: linear-gradient(160deg, #0F1217, #0A0C10);
+    border: 1px solid #1A1E25; border-radius: 16px;
+  }
+  .before .col { display: flex; align-items: center; gap: 16px; }
+  .before .col img { width: 78px; height: 78px; border-radius: 20px; display: block;
+    box-shadow: 0 8px 22px rgba(0,0,0,.5); }
+  .before .col .mini { display: flex; align-items: flex-end; gap: 10px; }
+  .before .cap { font-size: 11.5px; letter-spacing: .1em; color: #5A6474; }
+  .before .cap b { display: block; font-size: 13.5px; color: #98A3B4; letter-spacing: 0; font-weight: 500; margin-top: 2px; }
+  .before .arrow { color: #2E3540; font-size: 18px; padding: 0 6px; }
+  .mini-icon { width: 52px; height: 52px; border-radius: 13px; overflow: hidden; display: block;
+    box-shadow: 0 6px 16px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05); flex: none; }
+  .mini-icon svg { width: 100%; height: 100%; display: block; }
+  .before .note { margin-left: auto; font-size: 12px; color: #6B7688; text-align: right; line-height: 1.7; max-width: 330px; }
+
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 26px; }
+  .card {
+    background: linear-gradient(165deg, #101318, #0B0D11);
+    border: 1px solid #1C2028; border-radius: 18px;
+    padding: 26px 22px 22px; display: flex; flex-direction: column;
+  }
+  .glyph { display: grid; place-items: center; padding: 6px 0 20px; }
+  .glyph svg { width: 100%; height: auto; max-width: 172px; display: block; border-radius: 15.5%;
+    box-shadow: 0 16px 38px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.05); }
+  .tagline { margin-bottom: 10px; }
+  .tag { font-size: 10.5px; letter-spacing: .2em; color: #7C8798; border: 1px solid #252A33;
+    border-radius: 4px; padding: 2px 7px; }
+  h2 { font-size: 21px; font-weight: 600; margin: 0 0 8px; display: flex; align-items: baseline; gap: 9px; }
+  h2 em { font-style: normal; font-size: 11.5px; letter-spacing: .16em; color: #808C9E; font-weight: 400; }
+  .line { margin: 0 0 16px; font-size: 12.5px; color: #96A1B4; line-height: 1.65; min-height: 42px; }
+  .why { margin: 0 0 18px; padding: 0; list-style: none; }
+  .why li { position: relative; padding-left: 14px; font-size: 12px; color: #7C8798; line-height: 1.62; margin-bottom: 7px; }
+  .why li::before { content: ''; position: absolute; left: 0; top: 9px; width: 4px; height: 4px;
+    border-radius: 50%; background: #39414F; }
+  .pal { display: flex; gap: 5px; margin-bottom: 10px; }
+  .pal i { width: 22px; height: 22px; border-radius: 6px; display: block; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+  .fit { font-size: 11px; color: #5E6879; letter-spacing: .04em; margin-top: auto;
+    padding-top: 10px; border-top: 1px solid #171B21; }
+
+  .sizes { margin-top: 44px; border-top: 1px solid #191D24; padding-top: 30px; }
+  .sizes h3 { font-size: 12px; letter-spacing: .2em; color: #5E6879; text-transform: uppercase;
+    font-weight: 500; margin: 0 0 22px; }
+  .size-row { display: flex; align-items: center; gap: 28px; padding: 9px 0; }
+  .size-name { width: 88px; font-size: 12px; color: #7C8798; flex: none; }
+  .size-strip { display: flex; align-items: flex-end; gap: 20px; }
+  .sz { display: block; border-radius: 22%; overflow: hidden; }
+  .sz svg { width: 100%; height: 100%; display: block; }
+
+  .verdict { margin-top: 44px; border: 1px solid #212734; background: linear-gradient(160deg, #0F1219, #0A0C10);
+    border-radius: 16px; padding: 26px 30px; }
+  .verdict h3 { margin: 0 0 12px; font-size: 13px; letter-spacing: .16em; color: #6B7688; font-weight: 500; }
+  .verdict p { margin: 0 0 9px; font-size: 13px; color: #93A0B2; line-height: 1.8; }
+  .verdict b { color: #DDE5F2; font-weight: 600; }
+  footer { margin-top: 34px; font-size: 11.5px; color: #474F5C; }
+
+  @media (max-width: 1080px) { .grid { grid-template-columns: repeat(2, 1fr); } .before { flex-wrap: wrap; } .before .note { text-align: left; margin-left: 0; } }
+  @media (max-width: 620px) { body { padding: 32px 18px 48px; } .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Rebrand proposal · image-nest</div>
+    <h1>月巢 <span>→</span> 四组新名字与图标</h1>
+    <p>现名「月巢 / MoonNest」偏温软居家，图标里那只巢加三颗彩蛋更像亲子应用。这一版把四组方案的配色全部放开：每组一个主色调，冷感还在，但不至于一片灰黑。</p>
+  </header>
+
+  <div class="before">
+    <div class="col">
+      <img src="data:image/png;base64,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" alt="现在的图标" />
+      <div class="cap">现在<b>月巢 · MoonNest</b></div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="col">
+      <div class="mini">
+        <span class="mini-icon"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sg-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2340"/>
+      <stop offset="0.5" stop-color="#101526"/>
+      <stop offset="1" stop-color="#07090F"/>
+    </linearGradient>
+    <radialGradient id="sg-halo" cx="0.5" cy="0.4" r="0.52">
+      <stop offset="0" stop-color="#6E8BFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#8A5CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sg-top" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#EDF2FF"/>
+      <stop offset="1" stop-color="#C9D6F5"/>
+    </linearGradient>
+    <linearGradient id="sg-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9AB0F0"/>
+      <stop offset="0.45" stop-color="#7B90DC"/>
+      <stop offset="1" stop-color="#4E5FA8"/>
+    </linearGradient>
+    <linearGradient id="sg-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CB4"/>
+      <stop offset="0.5" stop-color="#553D85"/>
+      <stop offset="1" stop-color="#2E2154"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#sg-bg)"/>
+  <circle cx="256" cy="234" r="250" fill="url(#sg-halo)"/>
+  <path d="M256 106 L418 182 L256 258 L94 182 Z" fill="url(#sg-top)"/>
+  <path d="M94 182 L256 258 L256 410 L94 334 Z" fill="url(#sg-left)"/>
+  <path d="M256 258 L418 182 L418 334 L256 410 Z" fill="url(#sg-right)"/>
+  <path d="M94 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M418 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>
+</svg></span><span class="mini-icon"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg></span><span class="mini-icon"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lm-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#0F2027"/>
+      <stop offset="0.5" stop-color="#0A161B"/>
+      <stop offset="1" stop-color="#04080A"/>
+    </linearGradient>
+    <radialGradient id="lm-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F0B860" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0B860" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lm-ring" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#FFF7E6"/>
+      <stop offset="0.32" stop-color="#F0D49B"/>
+      <stop offset="0.62" stop-color="#C99B52"/>
+      <stop offset="1" stop-color="#7A5A2B"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeA" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#75623F"/>
+      <stop offset="0.55" stop-color="#42392B"/>
+      <stop offset="1" stop-color="#282218"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeB" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5C503C"/>
+      <stop offset="0.55" stop-color="#352E23"/>
+      <stop offset="1" stop-color="#1D1912"/>
+    </linearGradient>
+    <radialGradient id="lm-aperture" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3A2C18"/>
+      <stop offset="0.5" stop-color="#17130D"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="lm-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.65"/>
+      <stop offset="0.45" stop-color="#F0A03C" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F0A03C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lm-bg)"/>
+  <circle cx="256" cy="258" r="230" fill="url(#lm-glow)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L377.0 339.6 A146 146 0 0 0 387.2 194.0 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 210.0 L339.1 306.0 L245.8 403.6 A146 146 0 0 0 377.0 339.6 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 306.0 L256.0 354.0 L124.8 322.0 A146 146 0 0 0 245.8 403.6 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 354.0 L172.9 306.0 L135.0 176.4 A146 146 0 0 0 124.8 322.0 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 306.0 L172.9 210.0 L266.2 112.4 A146 146 0 0 0 135.0 176.4 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 210.0 L256.0 162.0 L387.2 194.0 A146 146 0 0 0 266.2 112.4 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="url(#lm-aperture)"/>
+  <circle cx="256" cy="258" r="62" fill="url(#lm-core)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="none" stroke="#FFE3AE" stroke-opacity="0.38" stroke-width="1.8"/>
+  <circle cx="256" cy="258" r="162"
+          fill="none" stroke="url(#lm-ring)" stroke-width="32"/>
+</svg></span><span class="mini-icon"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lu-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#1D1640"/>
+      <stop offset="0.5" stop-color="#110D24"/>
+      <stop offset="1" stop-color="#07050F"/>
+    </linearGradient>
+    <radialGradient id="lu-neb1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7B5CE8" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#7B5CE8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lu-neb2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E85CA8" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#E85CA8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lu-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#F2ECFF"/>
+      <stop offset="1" stop-color="#C0B2E8"/>
+    </linearGradient>
+    <mask id="lu-cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="309.7" cy="196.1" r="138" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lu-bg)"/>
+  <circle cx="180" cy="200" r="230" fill="url(#lu-neb1)"/>
+  <circle cx="392" cy="356" r="210" fill="url(#lu-neb2)"/>
+  <circle cx="250" cy="258" r="190" fill="none" stroke="#C9B8FF" stroke-opacity="0.15" stroke-width="1.6"/>
+  <circle cx="250" cy="258" r="152" fill="url(#lu-moon)" mask="url(#lu-cut)"/>
+  <g fill="#FFFFFF">
+    <circle cx="352" cy="152" r="4" fill-opacity="0.85"/>
+    <circle cx="398" cy="196" r="2.6" fill-opacity="0.55"/>
+    <circle cx="330" cy="212" r="2.2" fill-opacity="0.42"/>
+    <circle cx="416" cy="148" r="2" fill-opacity="0.32"/>
+  </g>
+  <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fill-opacity="0.6"/>
+  <circle cx="424" cy="216" r="2" fill="#B8D8F5" fill-opacity="0.55"/>
+</svg></span>
+      </div>
+      <div class="cap">提案<b>四选一</b></div>
+    </div>
+    <div class="note">同一个深色基调、同样 512×512 squircle、同样手写矢量。<br>区别只在主色与意象。</div>
+  </div>
+
+  <div class="grid">
+      <article class="card">
+        <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sg-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2340"/>
+      <stop offset="0.5" stop-color="#101526"/>
+      <stop offset="1" stop-color="#07090F"/>
+    </linearGradient>
+    <radialGradient id="sg-halo" cx="0.5" cy="0.4" r="0.52">
+      <stop offset="0" stop-color="#6E8BFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#8A5CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sg-top" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#EDF2FF"/>
+      <stop offset="1" stop-color="#C9D6F5"/>
+    </linearGradient>
+    <linearGradient id="sg-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9AB0F0"/>
+      <stop offset="0.45" stop-color="#7B90DC"/>
+      <stop offset="1" stop-color="#4E5FA8"/>
+    </linearGradient>
+    <linearGradient id="sg-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CB4"/>
+      <stop offset="0.5" stop-color="#553D85"/>
+      <stop offset="1" stop-color="#2E2154"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#sg-bg)"/>
+  <circle cx="256" cy="234" r="250" fill="url(#sg-halo)"/>
+  <path d="M256 106 L418 182 L256 258 L94 182 Z" fill="url(#sg-top)"/>
+  <path d="M94 182 L256 258 L256 410 L94 334 Z" fill="url(#sg-left)"/>
+  <path d="M256 258 L418 182 L418 334 L256 410 Z" fill="url(#sg-right)"/>
+  <path d="M94 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M418 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>
+</svg></div>
+        <div class="tagline"><span class="tag">A</span></div>
+        <h2>银盐<em>Silvergrain</em></h2>
+        <p class="line">一张照片的起点，是一颗银盐晶体。</p>
+        <ul class="why"><li>摄影的化学本源，器材党与老法师一听就懂</li><li>英文生僻、独一无二，好搜好记，不撞名</li><li>配色：银白 → 靛蓝 → 紫罗兰 的虹彩金属</li></ul>
+        <div class="pal"><i style="background:#FFFFFF"></i><i style="background:#9AB0F0"></i><i style="background:#7C5CB4"></i><i style="background:#1B2340"></i></div>
+        <div class="fit">冷冽的金属感</div>
+      </article>
+      <article class="card">
+        <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg></div>
+        <div class="tagline"><span class="tag">B</span></div>
+        <h2>棱镜<em>Prism</em></h2>
+        <p class="line">一束白光穿过它，才看得见所有颜色。</p>
+        <ul class="why"><li>光学意象最直白，一眼知道和影像有关</li><li>分光 = 从一堆素材里挑出想要的那张</li><li>配色：整条光谱搬上三角形，五色一起说话</li></ul>
+        <div class="pal"><i style="background:#5CD6EE"></i><i style="background:#63DCA8"></i><i style="background:#F0DA65"></i><i style="background:#F5A45E"></i><i style="background:#EE7BA4"></i></div>
+        <div class="fit">最跳、色彩最足</div>
+      </article>
+      <article class="card">
+        <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lm-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#0F2027"/>
+      <stop offset="0.5" stop-color="#0A161B"/>
+      <stop offset="1" stop-color="#04080A"/>
+    </linearGradient>
+    <radialGradient id="lm-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F0B860" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0B860" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lm-ring" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#FFF7E6"/>
+      <stop offset="0.32" stop-color="#F0D49B"/>
+      <stop offset="0.62" stop-color="#C99B52"/>
+      <stop offset="1" stop-color="#7A5A2B"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeA" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#75623F"/>
+      <stop offset="0.55" stop-color="#42392B"/>
+      <stop offset="1" stop-color="#282218"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeB" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5C503C"/>
+      <stop offset="0.55" stop-color="#352E23"/>
+      <stop offset="1" stop-color="#1D1912"/>
+    </linearGradient>
+    <radialGradient id="lm-aperture" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3A2C18"/>
+      <stop offset="0.5" stop-color="#17130D"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="lm-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.65"/>
+      <stop offset="0.45" stop-color="#F0A03C" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F0A03C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lm-bg)"/>
+  <circle cx="256" cy="258" r="230" fill="url(#lm-glow)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L377.0 339.6 A146 146 0 0 0 387.2 194.0 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 210.0 L339.1 306.0 L245.8 403.6 A146 146 0 0 0 377.0 339.6 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 306.0 L256.0 354.0 L124.8 322.0 A146 146 0 0 0 245.8 403.6 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 354.0 L172.9 306.0 L135.0 176.4 A146 146 0 0 0 124.8 322.0 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 306.0 L172.9 210.0 L266.2 112.4 A146 146 0 0 0 135.0 176.4 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 210.0 L256.0 162.0 L387.2 194.0 A146 146 0 0 0 266.2 112.4 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="url(#lm-aperture)"/>
+  <circle cx="256" cy="258" r="62" fill="url(#lm-core)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="none" stroke="#FFE3AE" stroke-opacity="0.38" stroke-width="1.8"/>
+  <circle cx="256" cy="258" r="162"
+          fill="none" stroke="url(#lm-ring)" stroke-width="32"/>
+</svg></div>
+        <div class="tagline"><span class="tag">C</span></div>
+        <h2>曜<em>Lumen</em></h2>
+        <p class="line">光圈开到最大，光才进得来。</p>
+        <ul class="why"><li>六叶光圈是真器材符号，专业感直接拉满</li><li>「曜」单字极简，日月星辰皆可承载</li><li>配色：香槟金环 + 深青底，像一支老镜</li></ul>
+        <div class="pal"><i style="background:#FFF7E6"></i><i style="background:#F0D49B"></i><i style="background:#C99B52"></i><i style="background:#0F2027"></i></div>
+        <div class="fit">低调的一抹金</div>
+      </article>
+      <article class="card">
+        <div class="glyph"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lu-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#1D1640"/>
+      <stop offset="0.5" stop-color="#110D24"/>
+      <stop offset="1" stop-color="#07050F"/>
+    </linearGradient>
+    <radialGradient id="lu-neb1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7B5CE8" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#7B5CE8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lu-neb2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E85CA8" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#E85CA8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lu-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#F2ECFF"/>
+      <stop offset="1" stop-color="#C0B2E8"/>
+    </linearGradient>
+    <mask id="lu-cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="309.7" cy="196.1" r="138" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lu-bg)"/>
+  <circle cx="180" cy="200" r="230" fill="url(#lu-neb1)"/>
+  <circle cx="392" cy="356" r="210" fill="url(#lu-neb2)"/>
+  <circle cx="250" cy="258" r="190" fill="none" stroke="#C9B8FF" stroke-opacity="0.15" stroke-width="1.6"/>
+  <circle cx="250" cy="258" r="152" fill="url(#lu-moon)" mask="url(#lu-cut)"/>
+  <g fill="#FFFFFF">
+    <circle cx="352" cy="152" r="4" fill-opacity="0.85"/>
+    <circle cx="398" cy="196" r="2.6" fill-opacity="0.55"/>
+    <circle cx="330" cy="212" r="2.2" fill-opacity="0.42"/>
+    <circle cx="416" cy="148" r="2" fill-opacity="0.32"/>
+  </g>
+  <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fill-opacity="0.6"/>
+  <circle cx="424" cy="216" r="2" fill="#B8D8F5" fill-opacity="0.55"/>
+</svg></div>
+        <div class="tagline"><span class="tag">D</span></div>
+        <h2>月相<em>Lunaris</em></h2>
+        <p class="line">夜里的光最安静，也最适合收拢底片。</p>
+        <ul class="why"><li>延续「月」的 DNA，老用户不会有割裂感</li><li>去掉巢与彩球后，从亲子感变成天文台感</li><li>配色：紫罗兰星云打底，银月落在中间</li></ul>
+        <div class="pal"><i style="background:#FFFFFF"></i><i style="background:#C0B2E8"></i><i style="background:#7B5CE8"></i><i style="background:#E85CA8"></i></div>
+        <div class="fit">最好看、也最稳</div>
+      </article></div>
+
+  <section class="sizes">
+    <h3>小尺寸表现 · Dock / 任务栏 / 文件列表</h3>
+    
+      <div class="size-row">
+        <span class="size-name">A · 银盐</span>
+        <div class="size-strip">
+          <span class="sz" style="width:96px;height:96px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sg-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2340"/>
+      <stop offset="0.5" stop-color="#101526"/>
+      <stop offset="1" stop-color="#07090F"/>
+    </linearGradient>
+    <radialGradient id="sg-halo" cx="0.5" cy="0.4" r="0.52">
+      <stop offset="0" stop-color="#6E8BFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#8A5CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sg-top" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#EDF2FF"/>
+      <stop offset="1" stop-color="#C9D6F5"/>
+    </linearGradient>
+    <linearGradient id="sg-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9AB0F0"/>
+      <stop offset="0.45" stop-color="#7B90DC"/>
+      <stop offset="1" stop-color="#4E5FA8"/>
+    </linearGradient>
+    <linearGradient id="sg-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CB4"/>
+      <stop offset="0.5" stop-color="#553D85"/>
+      <stop offset="1" stop-color="#2E2154"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#sg-bg)"/>
+  <circle cx="256" cy="234" r="250" fill="url(#sg-halo)"/>
+  <path d="M256 106 L418 182 L256 258 L94 182 Z" fill="url(#sg-top)"/>
+  <path d="M94 182 L256 258 L256 410 L94 334 Z" fill="url(#sg-left)"/>
+  <path d="M256 258 L418 182 L418 334 L256 410 Z" fill="url(#sg-right)"/>
+  <path d="M94 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M418 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:64px;height:64px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sg-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2340"/>
+      <stop offset="0.5" stop-color="#101526"/>
+      <stop offset="1" stop-color="#07090F"/>
+    </linearGradient>
+    <radialGradient id="sg-halo" cx="0.5" cy="0.4" r="0.52">
+      <stop offset="0" stop-color="#6E8BFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#8A5CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sg-top" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#EDF2FF"/>
+      <stop offset="1" stop-color="#C9D6F5"/>
+    </linearGradient>
+    <linearGradient id="sg-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9AB0F0"/>
+      <stop offset="0.45" stop-color="#7B90DC"/>
+      <stop offset="1" stop-color="#4E5FA8"/>
+    </linearGradient>
+    <linearGradient id="sg-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CB4"/>
+      <stop offset="0.5" stop-color="#553D85"/>
+      <stop offset="1" stop-color="#2E2154"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#sg-bg)"/>
+  <circle cx="256" cy="234" r="250" fill="url(#sg-halo)"/>
+  <path d="M256 106 L418 182 L256 258 L94 182 Z" fill="url(#sg-top)"/>
+  <path d="M94 182 L256 258 L256 410 L94 334 Z" fill="url(#sg-left)"/>
+  <path d="M256 258 L418 182 L418 334 L256 410 Z" fill="url(#sg-right)"/>
+  <path d="M94 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M418 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:48px;height:48px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sg-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2340"/>
+      <stop offset="0.5" stop-color="#101526"/>
+      <stop offset="1" stop-color="#07090F"/>
+    </linearGradient>
+    <radialGradient id="sg-halo" cx="0.5" cy="0.4" r="0.52">
+      <stop offset="0" stop-color="#6E8BFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#8A5CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sg-top" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#EDF2FF"/>
+      <stop offset="1" stop-color="#C9D6F5"/>
+    </linearGradient>
+    <linearGradient id="sg-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9AB0F0"/>
+      <stop offset="0.45" stop-color="#7B90DC"/>
+      <stop offset="1" stop-color="#4E5FA8"/>
+    </linearGradient>
+    <linearGradient id="sg-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CB4"/>
+      <stop offset="0.5" stop-color="#553D85"/>
+      <stop offset="1" stop-color="#2E2154"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#sg-bg)"/>
+  <circle cx="256" cy="234" r="250" fill="url(#sg-halo)"/>
+  <path d="M256 106 L418 182 L256 258 L94 182 Z" fill="url(#sg-top)"/>
+  <path d="M94 182 L256 258 L256 410 L94 334 Z" fill="url(#sg-left)"/>
+  <path d="M256 258 L418 182 L418 334 L256 410 Z" fill="url(#sg-right)"/>
+  <path d="M94 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M418 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:32px;height:32px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sg-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2340"/>
+      <stop offset="0.5" stop-color="#101526"/>
+      <stop offset="1" stop-color="#07090F"/>
+    </linearGradient>
+    <radialGradient id="sg-halo" cx="0.5" cy="0.4" r="0.52">
+      <stop offset="0" stop-color="#6E8BFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#8A5CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sg-top" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#EDF2FF"/>
+      <stop offset="1" stop-color="#C9D6F5"/>
+    </linearGradient>
+    <linearGradient id="sg-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9AB0F0"/>
+      <stop offset="0.45" stop-color="#7B90DC"/>
+      <stop offset="1" stop-color="#4E5FA8"/>
+    </linearGradient>
+    <linearGradient id="sg-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CB4"/>
+      <stop offset="0.5" stop-color="#553D85"/>
+      <stop offset="1" stop-color="#2E2154"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#sg-bg)"/>
+  <circle cx="256" cy="234" r="250" fill="url(#sg-halo)"/>
+  <path d="M256 106 L418 182 L256 258 L94 182 Z" fill="url(#sg-top)"/>
+  <path d="M94 182 L256 258 L256 410 L94 334 Z" fill="url(#sg-left)"/>
+  <path d="M256 258 L418 182 L418 334 L256 410 Z" fill="url(#sg-right)"/>
+  <path d="M94 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M418 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:24px;height:24px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sg-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2340"/>
+      <stop offset="0.5" stop-color="#101526"/>
+      <stop offset="1" stop-color="#07090F"/>
+    </linearGradient>
+    <radialGradient id="sg-halo" cx="0.5" cy="0.4" r="0.52">
+      <stop offset="0" stop-color="#6E8BFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#8A5CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sg-top" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#EDF2FF"/>
+      <stop offset="1" stop-color="#C9D6F5"/>
+    </linearGradient>
+    <linearGradient id="sg-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9AB0F0"/>
+      <stop offset="0.45" stop-color="#7B90DC"/>
+      <stop offset="1" stop-color="#4E5FA8"/>
+    </linearGradient>
+    <linearGradient id="sg-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CB4"/>
+      <stop offset="0.5" stop-color="#553D85"/>
+      <stop offset="1" stop-color="#2E2154"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#sg-bg)"/>
+  <circle cx="256" cy="234" r="250" fill="url(#sg-halo)"/>
+  <path d="M256 106 L418 182 L256 258 L94 182 Z" fill="url(#sg-top)"/>
+  <path d="M94 182 L256 258 L256 410 L94 334 Z" fill="url(#sg-left)"/>
+  <path d="M256 258 L418 182 L418 334 L256 410 Z" fill="url(#sg-right)"/>
+  <path d="M94 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M418 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:16px;height:16px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sg-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#1B2340"/>
+      <stop offset="0.5" stop-color="#101526"/>
+      <stop offset="1" stop-color="#07090F"/>
+    </linearGradient>
+    <radialGradient id="sg-halo" cx="0.5" cy="0.4" r="0.52">
+      <stop offset="0" stop-color="#6E8BFF" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#8A5CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sg-top" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#EDF2FF"/>
+      <stop offset="1" stop-color="#C9D6F5"/>
+    </linearGradient>
+    <linearGradient id="sg-left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9AB0F0"/>
+      <stop offset="0.45" stop-color="#7B90DC"/>
+      <stop offset="1" stop-color="#4E5FA8"/>
+    </linearGradient>
+    <linearGradient id="sg-right" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C5CB4"/>
+      <stop offset="0.5" stop-color="#553D85"/>
+      <stop offset="1" stop-color="#2E2154"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#sg-bg)"/>
+  <circle cx="256" cy="234" r="250" fill="url(#sg-halo)"/>
+  <path d="M256 106 L418 182 L256 258 L94 182 Z" fill="url(#sg-top)"/>
+  <path d="M94 182 L256 258 L256 410 L94 334 Z" fill="url(#sg-left)"/>
+  <path d="M256 258 L418 182 L418 334 L256 410 Z" fill="url(#sg-right)"/>
+  <path d="M94 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M418 182 L256 258" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="1.6" stroke-linecap="round"/>
+</svg></span>
+        </div>
+      </div>
+      <div class="size-row">
+        <span class="size-name">B · 棱镜</span>
+        <div class="size-strip">
+          <span class="sz" style="width:96px;height:96px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:64px;height:64px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:48px;height:48px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:32px;height:32px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:24px;height:24px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg></span><span class="sz" style="width:16px;height:16px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg></span>
+        </div>
+      </div>
+      <div class="size-row">
+        <span class="size-name">C · 曜</span>
+        <div class="size-strip">
+          <span class="sz" style="width:96px;height:96px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lm-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#0F2027"/>
+      <stop offset="0.5" stop-color="#0A161B"/>
+      <stop offset="1" stop-color="#04080A"/>
+    </linearGradient>
+    <radialGradient id="lm-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F0B860" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0B860" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lm-ring" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#FFF7E6"/>
+      <stop offset="0.32" stop-color="#F0D49B"/>
+      <stop offset="0.62" stop-color="#C99B52"/>
+      <stop offset="1" stop-color="#7A5A2B"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeA" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#75623F"/>
+      <stop offset="0.55" stop-color="#42392B"/>
+      <stop offset="1" stop-color="#282218"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeB" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5C503C"/>
+      <stop offset="0.55" stop-color="#352E23"/>
+      <stop offset="1" stop-color="#1D1912"/>
+    </linearGradient>
+    <radialGradient id="lm-aperture" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3A2C18"/>
+      <stop offset="0.5" stop-color="#17130D"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="lm-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.65"/>
+      <stop offset="0.45" stop-color="#F0A03C" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F0A03C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lm-bg)"/>
+  <circle cx="256" cy="258" r="230" fill="url(#lm-glow)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L377.0 339.6 A146 146 0 0 0 387.2 194.0 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 210.0 L339.1 306.0 L245.8 403.6 A146 146 0 0 0 377.0 339.6 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 306.0 L256.0 354.0 L124.8 322.0 A146 146 0 0 0 245.8 403.6 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 354.0 L172.9 306.0 L135.0 176.4 A146 146 0 0 0 124.8 322.0 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 306.0 L172.9 210.0 L266.2 112.4 A146 146 0 0 0 135.0 176.4 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 210.0 L256.0 162.0 L387.2 194.0 A146 146 0 0 0 266.2 112.4 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="url(#lm-aperture)"/>
+  <circle cx="256" cy="258" r="62" fill="url(#lm-core)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="none" stroke="#FFE3AE" stroke-opacity="0.38" stroke-width="1.8"/>
+  <circle cx="256" cy="258" r="162"
+          fill="none" stroke="url(#lm-ring)" stroke-width="32"/>
+</svg></span><span class="sz" style="width:64px;height:64px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lm-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#0F2027"/>
+      <stop offset="0.5" stop-color="#0A161B"/>
+      <stop offset="1" stop-color="#04080A"/>
+    </linearGradient>
+    <radialGradient id="lm-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F0B860" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0B860" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lm-ring" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#FFF7E6"/>
+      <stop offset="0.32" stop-color="#F0D49B"/>
+      <stop offset="0.62" stop-color="#C99B52"/>
+      <stop offset="1" stop-color="#7A5A2B"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeA" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#75623F"/>
+      <stop offset="0.55" stop-color="#42392B"/>
+      <stop offset="1" stop-color="#282218"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeB" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5C503C"/>
+      <stop offset="0.55" stop-color="#352E23"/>
+      <stop offset="1" stop-color="#1D1912"/>
+    </linearGradient>
+    <radialGradient id="lm-aperture" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3A2C18"/>
+      <stop offset="0.5" stop-color="#17130D"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="lm-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.65"/>
+      <stop offset="0.45" stop-color="#F0A03C" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F0A03C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lm-bg)"/>
+  <circle cx="256" cy="258" r="230" fill="url(#lm-glow)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L377.0 339.6 A146 146 0 0 0 387.2 194.0 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 210.0 L339.1 306.0 L245.8 403.6 A146 146 0 0 0 377.0 339.6 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 306.0 L256.0 354.0 L124.8 322.0 A146 146 0 0 0 245.8 403.6 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 354.0 L172.9 306.0 L135.0 176.4 A146 146 0 0 0 124.8 322.0 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 306.0 L172.9 210.0 L266.2 112.4 A146 146 0 0 0 135.0 176.4 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 210.0 L256.0 162.0 L387.2 194.0 A146 146 0 0 0 266.2 112.4 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="url(#lm-aperture)"/>
+  <circle cx="256" cy="258" r="62" fill="url(#lm-core)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="none" stroke="#FFE3AE" stroke-opacity="0.38" stroke-width="1.8"/>
+  <circle cx="256" cy="258" r="162"
+          fill="none" stroke="url(#lm-ring)" stroke-width="32"/>
+</svg></span><span class="sz" style="width:48px;height:48px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lm-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#0F2027"/>
+      <stop offset="0.5" stop-color="#0A161B"/>
+      <stop offset="1" stop-color="#04080A"/>
+    </linearGradient>
+    <radialGradient id="lm-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F0B860" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0B860" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lm-ring" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#FFF7E6"/>
+      <stop offset="0.32" stop-color="#F0D49B"/>
+      <stop offset="0.62" stop-color="#C99B52"/>
+      <stop offset="1" stop-color="#7A5A2B"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeA" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#75623F"/>
+      <stop offset="0.55" stop-color="#42392B"/>
+      <stop offset="1" stop-color="#282218"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeB" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5C503C"/>
+      <stop offset="0.55" stop-color="#352E23"/>
+      <stop offset="1" stop-color="#1D1912"/>
+    </linearGradient>
+    <radialGradient id="lm-aperture" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3A2C18"/>
+      <stop offset="0.5" stop-color="#17130D"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="lm-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.65"/>
+      <stop offset="0.45" stop-color="#F0A03C" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F0A03C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lm-bg)"/>
+  <circle cx="256" cy="258" r="230" fill="url(#lm-glow)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L377.0 339.6 A146 146 0 0 0 387.2 194.0 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 210.0 L339.1 306.0 L245.8 403.6 A146 146 0 0 0 377.0 339.6 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 306.0 L256.0 354.0 L124.8 322.0 A146 146 0 0 0 245.8 403.6 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 354.0 L172.9 306.0 L135.0 176.4 A146 146 0 0 0 124.8 322.0 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 306.0 L172.9 210.0 L266.2 112.4 A146 146 0 0 0 135.0 176.4 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 210.0 L256.0 162.0 L387.2 194.0 A146 146 0 0 0 266.2 112.4 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="url(#lm-aperture)"/>
+  <circle cx="256" cy="258" r="62" fill="url(#lm-core)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="none" stroke="#FFE3AE" stroke-opacity="0.38" stroke-width="1.8"/>
+  <circle cx="256" cy="258" r="162"
+          fill="none" stroke="url(#lm-ring)" stroke-width="32"/>
+</svg></span><span class="sz" style="width:32px;height:32px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lm-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#0F2027"/>
+      <stop offset="0.5" stop-color="#0A161B"/>
+      <stop offset="1" stop-color="#04080A"/>
+    </linearGradient>
+    <radialGradient id="lm-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F0B860" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0B860" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lm-ring" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#FFF7E6"/>
+      <stop offset="0.32" stop-color="#F0D49B"/>
+      <stop offset="0.62" stop-color="#C99B52"/>
+      <stop offset="1" stop-color="#7A5A2B"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeA" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#75623F"/>
+      <stop offset="0.55" stop-color="#42392B"/>
+      <stop offset="1" stop-color="#282218"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeB" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5C503C"/>
+      <stop offset="0.55" stop-color="#352E23"/>
+      <stop offset="1" stop-color="#1D1912"/>
+    </linearGradient>
+    <radialGradient id="lm-aperture" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3A2C18"/>
+      <stop offset="0.5" stop-color="#17130D"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="lm-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.65"/>
+      <stop offset="0.45" stop-color="#F0A03C" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F0A03C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lm-bg)"/>
+  <circle cx="256" cy="258" r="230" fill="url(#lm-glow)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L377.0 339.6 A146 146 0 0 0 387.2 194.0 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 210.0 L339.1 306.0 L245.8 403.6 A146 146 0 0 0 377.0 339.6 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 306.0 L256.0 354.0 L124.8 322.0 A146 146 0 0 0 245.8 403.6 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 354.0 L172.9 306.0 L135.0 176.4 A146 146 0 0 0 124.8 322.0 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 306.0 L172.9 210.0 L266.2 112.4 A146 146 0 0 0 135.0 176.4 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 210.0 L256.0 162.0 L387.2 194.0 A146 146 0 0 0 266.2 112.4 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="url(#lm-aperture)"/>
+  <circle cx="256" cy="258" r="62" fill="url(#lm-core)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="none" stroke="#FFE3AE" stroke-opacity="0.38" stroke-width="1.8"/>
+  <circle cx="256" cy="258" r="162"
+          fill="none" stroke="url(#lm-ring)" stroke-width="32"/>
+</svg></span><span class="sz" style="width:24px;height:24px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lm-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#0F2027"/>
+      <stop offset="0.5" stop-color="#0A161B"/>
+      <stop offset="1" stop-color="#04080A"/>
+    </linearGradient>
+    <radialGradient id="lm-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F0B860" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0B860" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lm-ring" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#FFF7E6"/>
+      <stop offset="0.32" stop-color="#F0D49B"/>
+      <stop offset="0.62" stop-color="#C99B52"/>
+      <stop offset="1" stop-color="#7A5A2B"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeA" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#75623F"/>
+      <stop offset="0.55" stop-color="#42392B"/>
+      <stop offset="1" stop-color="#282218"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeB" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5C503C"/>
+      <stop offset="0.55" stop-color="#352E23"/>
+      <stop offset="1" stop-color="#1D1912"/>
+    </linearGradient>
+    <radialGradient id="lm-aperture" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3A2C18"/>
+      <stop offset="0.5" stop-color="#17130D"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="lm-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.65"/>
+      <stop offset="0.45" stop-color="#F0A03C" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F0A03C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lm-bg)"/>
+  <circle cx="256" cy="258" r="230" fill="url(#lm-glow)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L377.0 339.6 A146 146 0 0 0 387.2 194.0 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 210.0 L339.1 306.0 L245.8 403.6 A146 146 0 0 0 377.0 339.6 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 306.0 L256.0 354.0 L124.8 322.0 A146 146 0 0 0 245.8 403.6 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 354.0 L172.9 306.0 L135.0 176.4 A146 146 0 0 0 124.8 322.0 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 306.0 L172.9 210.0 L266.2 112.4 A146 146 0 0 0 135.0 176.4 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 210.0 L256.0 162.0 L387.2 194.0 A146 146 0 0 0 266.2 112.4 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="url(#lm-aperture)"/>
+  <circle cx="256" cy="258" r="62" fill="url(#lm-core)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="none" stroke="#FFE3AE" stroke-opacity="0.38" stroke-width="1.8"/>
+  <circle cx="256" cy="258" r="162"
+          fill="none" stroke="url(#lm-ring)" stroke-width="32"/>
+</svg></span><span class="sz" style="width:16px;height:16px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lm-bg" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#0F2027"/>
+      <stop offset="0.5" stop-color="#0A161B"/>
+      <stop offset="1" stop-color="#04080A"/>
+    </linearGradient>
+    <radialGradient id="lm-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F0B860" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0B860" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lm-ring" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#FFF7E6"/>
+      <stop offset="0.32" stop-color="#F0D49B"/>
+      <stop offset="0.62" stop-color="#C99B52"/>
+      <stop offset="1" stop-color="#7A5A2B"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeA" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#75623F"/>
+      <stop offset="0.55" stop-color="#42392B"/>
+      <stop offset="1" stop-color="#282218"/>
+    </linearGradient>
+    <linearGradient id="lm-bladeB" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#5C503C"/>
+      <stop offset="0.55" stop-color="#352E23"/>
+      <stop offset="1" stop-color="#1D1912"/>
+    </linearGradient>
+    <radialGradient id="lm-aperture" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#3A2C18"/>
+      <stop offset="0.5" stop-color="#17130D"/>
+      <stop offset="1" stop-color="#070605"/>
+    </radialGradient>
+    <radialGradient id="lm-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFC46B" stop-opacity="0.65"/>
+      <stop offset="0.45" stop-color="#F0A03C" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#F0A03C" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lm-bg)"/>
+  <circle cx="256" cy="258" r="230" fill="url(#lm-glow)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L377.0 339.6 A146 146 0 0 0 387.2 194.0 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 210.0 L339.1 306.0 L245.8 403.6 A146 146 0 0 0 377.0 339.6 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M339.1 306.0 L256.0 354.0 L124.8 322.0 A146 146 0 0 0 245.8 403.6 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 354.0 L172.9 306.0 L135.0 176.4 A146 146 0 0 0 124.8 322.0 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 306.0 L172.9 210.0 L266.2 112.4 A146 146 0 0 0 135.0 176.4 Z" fill="url(#lm-bladeA)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M172.9 210.0 L256.0 162.0 L387.2 194.0 A146 146 0 0 0 266.2 112.4 Z" fill="url(#lm-bladeB)" stroke="#0A0E10" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="url(#lm-aperture)"/>
+  <circle cx="256" cy="258" r="62" fill="url(#lm-core)"/>
+  <path d="M256.0 162.0 L339.1 210.0 L339.1 306.0 L256.0 354.0 L172.9 306.0 L172.9 210.0 Z" fill="none" stroke="#FFE3AE" stroke-opacity="0.38" stroke-width="1.8"/>
+  <circle cx="256" cy="258" r="162"
+          fill="none" stroke="url(#lm-ring)" stroke-width="32"/>
+</svg></span>
+        </div>
+      </div>
+      <div class="size-row">
+        <span class="size-name">D · 月相</span>
+        <div class="size-strip">
+          <span class="sz" style="width:96px;height:96px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lu-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#1D1640"/>
+      <stop offset="0.5" stop-color="#110D24"/>
+      <stop offset="1" stop-color="#07050F"/>
+    </linearGradient>
+    <radialGradient id="lu-neb1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7B5CE8" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#7B5CE8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lu-neb2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E85CA8" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#E85CA8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lu-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#F2ECFF"/>
+      <stop offset="1" stop-color="#C0B2E8"/>
+    </linearGradient>
+    <mask id="lu-cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="309.7" cy="196.1" r="138" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lu-bg)"/>
+  <circle cx="180" cy="200" r="230" fill="url(#lu-neb1)"/>
+  <circle cx="392" cy="356" r="210" fill="url(#lu-neb2)"/>
+  <circle cx="250" cy="258" r="190" fill="none" stroke="#C9B8FF" stroke-opacity="0.15" stroke-width="1.6"/>
+  <circle cx="250" cy="258" r="152" fill="url(#lu-moon)" mask="url(#lu-cut)"/>
+  <g fill="#FFFFFF">
+    <circle cx="352" cy="152" r="4" fill-opacity="0.85"/>
+    <circle cx="398" cy="196" r="2.6" fill-opacity="0.55"/>
+    <circle cx="330" cy="212" r="2.2" fill-opacity="0.42"/>
+    <circle cx="416" cy="148" r="2" fill-opacity="0.32"/>
+  </g>
+  <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fill-opacity="0.6"/>
+  <circle cx="424" cy="216" r="2" fill="#B8D8F5" fill-opacity="0.55"/>
+</svg></span><span class="sz" style="width:64px;height:64px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lu-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#1D1640"/>
+      <stop offset="0.5" stop-color="#110D24"/>
+      <stop offset="1" stop-color="#07050F"/>
+    </linearGradient>
+    <radialGradient id="lu-neb1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7B5CE8" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#7B5CE8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lu-neb2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E85CA8" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#E85CA8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lu-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#F2ECFF"/>
+      <stop offset="1" stop-color="#C0B2E8"/>
+    </linearGradient>
+    <mask id="lu-cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="309.7" cy="196.1" r="138" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lu-bg)"/>
+  <circle cx="180" cy="200" r="230" fill="url(#lu-neb1)"/>
+  <circle cx="392" cy="356" r="210" fill="url(#lu-neb2)"/>
+  <circle cx="250" cy="258" r="190" fill="none" stroke="#C9B8FF" stroke-opacity="0.15" stroke-width="1.6"/>
+  <circle cx="250" cy="258" r="152" fill="url(#lu-moon)" mask="url(#lu-cut)"/>
+  <g fill="#FFFFFF">
+    <circle cx="352" cy="152" r="4" fill-opacity="0.85"/>
+    <circle cx="398" cy="196" r="2.6" fill-opacity="0.55"/>
+    <circle cx="330" cy="212" r="2.2" fill-opacity="0.42"/>
+    <circle cx="416" cy="148" r="2" fill-opacity="0.32"/>
+  </g>
+  <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fill-opacity="0.6"/>
+  <circle cx="424" cy="216" r="2" fill="#B8D8F5" fill-opacity="0.55"/>
+</svg></span><span class="sz" style="width:48px;height:48px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lu-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#1D1640"/>
+      <stop offset="0.5" stop-color="#110D24"/>
+      <stop offset="1" stop-color="#07050F"/>
+    </linearGradient>
+    <radialGradient id="lu-neb1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7B5CE8" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#7B5CE8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lu-neb2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E85CA8" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#E85CA8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lu-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#F2ECFF"/>
+      <stop offset="1" stop-color="#C0B2E8"/>
+    </linearGradient>
+    <mask id="lu-cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="309.7" cy="196.1" r="138" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lu-bg)"/>
+  <circle cx="180" cy="200" r="230" fill="url(#lu-neb1)"/>
+  <circle cx="392" cy="356" r="210" fill="url(#lu-neb2)"/>
+  <circle cx="250" cy="258" r="190" fill="none" stroke="#C9B8FF" stroke-opacity="0.15" stroke-width="1.6"/>
+  <circle cx="250" cy="258" r="152" fill="url(#lu-moon)" mask="url(#lu-cut)"/>
+  <g fill="#FFFFFF">
+    <circle cx="352" cy="152" r="4" fill-opacity="0.85"/>
+    <circle cx="398" cy="196" r="2.6" fill-opacity="0.55"/>
+    <circle cx="330" cy="212" r="2.2" fill-opacity="0.42"/>
+    <circle cx="416" cy="148" r="2" fill-opacity="0.32"/>
+  </g>
+  <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fill-opacity="0.6"/>
+  <circle cx="424" cy="216" r="2" fill="#B8D8F5" fill-opacity="0.55"/>
+</svg></span><span class="sz" style="width:32px;height:32px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lu-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#1D1640"/>
+      <stop offset="0.5" stop-color="#110D24"/>
+      <stop offset="1" stop-color="#07050F"/>
+    </linearGradient>
+    <radialGradient id="lu-neb1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7B5CE8" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#7B5CE8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lu-neb2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E85CA8" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#E85CA8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lu-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#F2ECFF"/>
+      <stop offset="1" stop-color="#C0B2E8"/>
+    </linearGradient>
+    <mask id="lu-cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="309.7" cy="196.1" r="138" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lu-bg)"/>
+  <circle cx="180" cy="200" r="230" fill="url(#lu-neb1)"/>
+  <circle cx="392" cy="356" r="210" fill="url(#lu-neb2)"/>
+  <circle cx="250" cy="258" r="190" fill="none" stroke="#C9B8FF" stroke-opacity="0.15" stroke-width="1.6"/>
+  <circle cx="250" cy="258" r="152" fill="url(#lu-moon)" mask="url(#lu-cut)"/>
+  <g fill="#FFFFFF">
+    <circle cx="352" cy="152" r="4" fill-opacity="0.85"/>
+    <circle cx="398" cy="196" r="2.6" fill-opacity="0.55"/>
+    <circle cx="330" cy="212" r="2.2" fill-opacity="0.42"/>
+    <circle cx="416" cy="148" r="2" fill-opacity="0.32"/>
+  </g>
+  <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fill-opacity="0.6"/>
+  <circle cx="424" cy="216" r="2" fill="#B8D8F5" fill-opacity="0.55"/>
+</svg></span><span class="sz" style="width:24px;height:24px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lu-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#1D1640"/>
+      <stop offset="0.5" stop-color="#110D24"/>
+      <stop offset="1" stop-color="#07050F"/>
+    </linearGradient>
+    <radialGradient id="lu-neb1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7B5CE8" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#7B5CE8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lu-neb2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E85CA8" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#E85CA8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lu-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#F2ECFF"/>
+      <stop offset="1" stop-color="#C0B2E8"/>
+    </linearGradient>
+    <mask id="lu-cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="309.7" cy="196.1" r="138" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lu-bg)"/>
+  <circle cx="180" cy="200" r="230" fill="url(#lu-neb1)"/>
+  <circle cx="392" cy="356" r="210" fill="url(#lu-neb2)"/>
+  <circle cx="250" cy="258" r="190" fill="none" stroke="#C9B8FF" stroke-opacity="0.15" stroke-width="1.6"/>
+  <circle cx="250" cy="258" r="152" fill="url(#lu-moon)" mask="url(#lu-cut)"/>
+  <g fill="#FFFFFF">
+    <circle cx="352" cy="152" r="4" fill-opacity="0.85"/>
+    <circle cx="398" cy="196" r="2.6" fill-opacity="0.55"/>
+    <circle cx="330" cy="212" r="2.2" fill-opacity="0.42"/>
+    <circle cx="416" cy="148" r="2" fill-opacity="0.32"/>
+  </g>
+  <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fill-opacity="0.6"/>
+  <circle cx="424" cy="216" r="2" fill="#B8D8F5" fill-opacity="0.55"/>
+</svg></span><span class="sz" style="width:16px;height:16px"><svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="lu-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#1D1640"/>
+      <stop offset="0.5" stop-color="#110D24"/>
+      <stop offset="1" stop-color="#07050F"/>
+    </linearGradient>
+    <radialGradient id="lu-neb1" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#7B5CE8" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#7B5CE8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lu-neb2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E85CA8" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#E85CA8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lu-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.45" stop-color="#F2ECFF"/>
+      <stop offset="1" stop-color="#C0B2E8"/>
+    </linearGradient>
+    <mask id="lu-cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <circle cx="309.7" cy="196.1" r="138" fill="#000"/>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#lu-bg)"/>
+  <circle cx="180" cy="200" r="230" fill="url(#lu-neb1)"/>
+  <circle cx="392" cy="356" r="210" fill="url(#lu-neb2)"/>
+  <circle cx="250" cy="258" r="190" fill="none" stroke="#C9B8FF" stroke-opacity="0.15" stroke-width="1.6"/>
+  <circle cx="250" cy="258" r="152" fill="url(#lu-moon)" mask="url(#lu-cut)"/>
+  <g fill="#FFFFFF">
+    <circle cx="352" cy="152" r="4" fill-opacity="0.85"/>
+    <circle cx="398" cy="196" r="2.6" fill-opacity="0.55"/>
+    <circle cx="330" cy="212" r="2.2" fill-opacity="0.42"/>
+    <circle cx="416" cy="148" r="2" fill-opacity="0.32"/>
+  </g>
+  <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fill-opacity="0.6"/>
+  <circle cx="424" cy="216" r="2" fill="#B8D8F5" fill-opacity="0.55"/>
+</svg></span>
+        </div>
+      </div>
+  </section>
+
+  <section class="verdict">
+    <h3>怎么选</h3>
+    <p>要<b>最不撞名、最能立住专业人设</b> → <b>A 银盐 Silvergrain</b>。摄影的根摆在那里，没人会问「这名字什么意思」。</p>
+    <p>要<b>最好看、最稳妥</b> → <b>D 月相 Lunaris</b>。星云紫底 + 银月，大图惊艳，16px 下还是全场最清晰。</p>
+    <p>要<b>色彩最足、一眼看出搞影像</b> → <b>B 棱镜 Prism</b>，整条光谱直接摆在图标上。</p>
+    <p><b>C 曜 Lumen</b> 最硬核最耐看，但细节多，16px 会糊成一团，得 32px 以上才好看。</p>
+  </section>
+
+  <footer>图标均为手写矢量，已在 16 / 24 / 32 / 48 / 64 / 96 / 512 各档渲染验证。本轮只出方案，尚未改动项目代码。</footer>
+</div>
+</body>
+</html>

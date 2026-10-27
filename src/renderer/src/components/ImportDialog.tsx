@@ -80,7 +80,7 @@ export default function ImportDialog({
 
         <div className="p-4 space-y-4">
           <div className="text-[11.5px] text-[var(--muted)] leading-5">
-            选择一个文件夹，月巢会扫描并识别其中的照片（JPG、PNG、RAW、HEIC、TIFF 等）。
+            选择一个文件夹，月相会扫描并识别其中的照片（JPG、PNG、RAW、HEIC、TIFF 等）。
             导入在后台进行，期间可以继续浏览和整理其它照片。
           </div>
 

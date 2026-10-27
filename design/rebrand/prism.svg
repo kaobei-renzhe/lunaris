@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pr-bg" x1="0.12" y1="0" x2="0.88" y2="1">
+      <stop offset="0" stop-color="#1F1830"/>
+      <stop offset="0.55" stop-color="#120E1E"/>
+      <stop offset="1" stop-color="#070510"/>
+    </linearGradient>
+    <linearGradient id="pr-rainbow" x1="0.05" y1="0.95" x2="0.95" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE"/>
+      <stop offset="0.28" stop-color="#63DCA8"/>
+      <stop offset="0.52" stop-color="#F0DA65"/>
+      <stop offset="0.76" stop-color="#F5A45E"/>
+      <stop offset="1" stop-color="#EE7BA4"/>
+    </linearGradient>
+    <linearGradient id="pr-glass" x1="0.1" y1="0.95" x2="0.9" y2="0.05">
+      <stop offset="0" stop-color="#5CD6EE" stop-opacity="0.16"/>
+      <stop offset="0.5" stop-color="#F0DA65" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#EE7BA4" stop-opacity="0.13"/>
+    </linearGradient>
+    <radialGradient id="pr-flare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#pr-bg)"/>
+  <polygon points="256 114 106 376 406 376" fill="url(#pr-glass)" stroke="url(#pr-rainbow)" stroke-width="17" stroke-linejoin="round"/>
+  <line x1="30" y1="250" x2="178.1" y2="250" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="470" y2="172" stroke="#5CD6EE" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="486" y2="212" stroke="#63DCA8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="484" y2="254" stroke="#F0DA65" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="472" y2="296" stroke="#F5A45E" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="333.9" y1="250" x2="452" y2="336" stroke="#EE7BA4" stroke-width="9.5" stroke-linecap="round"/>
+</svg>

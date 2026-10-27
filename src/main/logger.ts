@@ -3,12 +3,14 @@ import { appendFile, mkdir, rename, stat, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /**
- * 极简文件日志：写 userData/logs/moonnest.log，超过上限按 .1…N 轮转。
+ * 极简文件日志：写 userData/logs/lunaris.log，超过上限按 .1…N 轮转。
  * 原则：日志失败绝不影响主流程，所以每个环节都吞掉异常。
  */
 export type LogLevel = 'info' | 'warn' | 'error'
 
-const MAX_BYTES = Number(process.env.MOONNEST_LOG_MAX_BYTES) || 5 * 1024 * 1024
+const MAX_BYTES =
+  Number(process.env.LUNARIS_LOG_MAX_BYTES ?? process.env.MOONNEST_LOG_MAX_BYTES) ||
+  5 * 1024 * 1024
 const KEEP_ROTATED = 4
 const MAX_META_CHARS = 1000
 
@@ -20,7 +22,7 @@ function logDir(): string {
 }
 
 function logFile(): string {
-  return join(logDir(), 'moonnest.log')
+  return join(logDir(), 'lunaris.log')
 }
 
 /** 日志可能被贴到公开地方，先把用户目录替换掉 */

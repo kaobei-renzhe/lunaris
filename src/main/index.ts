@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { BrowserWindow, app, nativeTheme, net, protocol } from 'electron'
@@ -46,6 +46,12 @@ function windowBackground(): string {
   return nativeTheme.shouldUseDarkColors ? '#0b0d11' : '#f6f7fa'
 }
 
+/**
+ * 调试开关：LUNARIS_HEADLESS=1 时窗口创建出来但不显示（照常渲染，可走调试端口截图），
+ * 免得跑一次调试就把界面弹到最前面打断手头的事。
+ */
+const headless = process.env.LUNARIS_HEADLESS === '1'
+
 function createWindow(): void {
   const iconPath = join(app.getAppPath(), 'build', 'icon.png')
   const win = new BrowserWindow({
@@ -55,7 +61,10 @@ function createWindow(): void {
     minHeight: 680,
     backgroundColor: windowBackground(),
     autoHideMenuBar: true,
-    title: '月巢',
+    title: '月相',
+    show: !headless,
+    // 隐藏态也要出帧，否则调试端口截到的是空白
+    paintWhenInitiallyHidden: true,
     ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -74,8 +83,40 @@ function createWindow(): void {
 const debugPort = process.env.IMAGENEST_DEBUG_PORT
 if (debugPort) app.commandLine.appendSwitch('remote-debugging-port', debugPort)
 
-const customUserData = process.env.IMAGENEST_USER_DATA
+const customUserData = process.env.IMAGENEST_USER_DATA ?? process.env.LUNARIS_USER_DATA
+
+/**
+ * 改名（月巢 / image-nest → 月相 / lunaris）后 Electron 的 userData 目录跟着变了，
+ * 首次启动时把旧目录里的配置、装备库与日志搬过来，老图库不用重新配置一遍。
+ * 只在目标目录还没有 config.json（即没配过）时执行，搬完就不管了。
+ */
+const LEGACY_APP_DIRS = ['image-nest', 'moonnest', '月巢']
+
+function migrateLegacyUserData(): void {
+  const target = app.getPath('userData')
+  if (existsSync(join(target, 'config.json'))) return
+  const appData = app.getPath('appData')
+  for (const name of LEGACY_APP_DIRS) {
+    const legacy = join(appData, name)
+    if (legacy === target) continue
+    if (!existsSync(join(legacy, 'config.json'))) continue
+    try {
+      mkdirSync(target, { recursive: true })
+      // 只搬业务数据；Cache / GPU 缓存这些重建即可，没必要带
+      for (const item of ['config.json', 'gear.json', 'logs']) {
+        const from = join(legacy, item)
+        if (existsSync(from)) cpSync(from, join(target, item), { recursive: true, force: false })
+      }
+      void log.info('app', '已从旧版本迁移配置', { from: legacy, to: target })
+    } catch (error) {
+      void log.warn('app', '迁移旧配置失败，按全新配置启动', { from: legacy, error: String(error) })
+    }
+    return
+  }
+}
+
 if (customUserData) app.setPath('userData', customUserData)
+else migrateLegacyUserData()
 
 app.whenReady().then(() => {
   void log.info('app', '启动', {

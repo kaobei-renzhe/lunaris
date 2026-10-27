@@ -257,7 +257,7 @@ export default function Sidebar({
           <div className="w-[26px] h-[26px]">
             <Logo size={26} />
           </div>
-          <div className="font-semibold text-[13.5px] tracking-wide">月巢</div>
+          <div className="font-semibold text-[13.5px] tracking-wide">月相</div>
           <button className="btn btn-ghost h-6 px-1.5 ml-auto" title="切换图库" onClick={onSwitch}>
             <ArrowLeftRight size={13} />
           </button>

@@ -56,9 +56,9 @@ export default function Welcome({ onReady, onBack, backLabel, notice }: WelcomeP
         <div className="mx-auto mb-6 w-[64px] h-[64px]">
           <Logo size={64} />
         </div>
-        <h1 className="text-[22px] font-semibold tracking-wide m-0">月巢</h1>
+        <h1 className="text-[22px] font-semibold tracking-wide m-0">月相</h1>
         <p className="text-[13px] text-[var(--muted)] mt-2 mb-8">
-          本地优先的素材巢 · 图片、相机与文字都归在这里
+          本地优先的图片素材库 · 照片、相机与文字都归在这里
         </p>
 
         <div className="flex flex-col gap-2">

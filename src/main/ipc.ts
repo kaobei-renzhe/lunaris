@@ -415,7 +415,7 @@ export function registerIpc(): void {
 
   ipcMain.handle('library:restore', async () => {
     const picked = await dialog.showOpenDialog({
-      title: '选择月巢备份文件',
+      title: '选择月相备份文件',
       properties: ['openFile'],
       filters: [{ name: 'Zip 压缩包', extensions: ['zip'] }]
     })

@@ -70,7 +70,7 @@ export async function createBackup(
 export function restoreBackup(zipPath: string, targetDir: string): { files: number } {
   const entries = listZipEntries(zipPath)
   const hasDb = entries.some((entry) => entry.name === 'library.db')
-  if (!hasDb) throw new Error('备份包里没有 library.db，可能不是月巢的备份')
+  if (!hasDb) throw new Error('备份包里没有 library.db，可能不是月相的备份')
 
   let files = 0
   for (const entry of entries) {

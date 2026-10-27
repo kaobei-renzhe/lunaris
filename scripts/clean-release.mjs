@@ -24,7 +24,7 @@ const compare = (a, b) => {
 
 const entries = readdirSync(dir)
 const installers = entries
-  .filter((name) => /^月巢 Setup \d+\.\d+\.\d+\.exe$/.test(name))
+  .filter((name) => /^月相 Setup \d+\.\d+\.\d+\.exe$/.test(name))
   .sort(compare)
 
 if (installers.length <= 1) {
@@ -41,7 +41,7 @@ for (const name of installers) {
 }
 
 for (const name of entries) {
-  if (!/^image-nest-\d+\.\d+\.\d+-x64\.nsis\.7z$/.test(name)) continue
+  if (!/^lunaris-\d+\.\d+\.\d+-x64\.nsis\.7z$/.test(name)) continue
   if (versionOf(name).join('.') === keepVersion) continue
   rmSync(join(dir, name), { force: true })
 }

@@ -2,12 +2,17 @@
 // 必须是阻塞式外链脚本（放在 head 里），不能改成 module，否则会延后到解析完成才执行
 ;(function () {
   try {
-    var stored = localStorage.getItem('moonnest:theme')
+    // 兼容改名前的旧键（月巢 moonnest → 月相 lunaris），老用户升级后首屏也不会闪
+    var read = function (key, legacy) {
+      var value = localStorage.getItem(key)
+      return value !== null ? value : localStorage.getItem(legacy)
+    }
+    var stored = read('lunaris:theme', 'moonnest:theme')
     var dark =
       stored === 'dark' ||
       (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
     document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-    var skin = localStorage.getItem('moonnest:skin')
+    var skin = read('lunaris:skin', 'moonnest:skin')
     if (skin && skin !== 'classic') {
       document.documentElement.dataset.skin = skin
     }

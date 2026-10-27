@@ -1,13 +1,13 @@
 {
-  "name": "image-nest",
-  "version": "0.1.40",
-  "description": "本地素材巢：图片、相机与文字的归置空间",
+  "name": "lunaris",
+  "version": "0.2.0",
+  "description": "本地优先的图片素材库：照片、相机与文字都归在这里",
   "main": "./out/main/index.js",
   "author": "silvermoon",
   "license": "MIT",
   "build": {
-    "appId": "com.silvermoon.moonnest",
-    "productName": "月巢",
+    "appId": "com.silvermoon.lunaris",
+    "productName": "月相",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -20,6 +20,7 @@
       "!**/node_modules/onnxruntime-node/bin/napi-*/linux/**",
       "!**/node_modules/onnxruntime-node/bin/napi-*/win32/arm64/**"
     ],
+    "npmRebuild": false,
     "asarUnpack": [
       "**/*.node",
       "**/node_modules/onnxruntime-node/**",
@@ -34,7 +35,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "shortcutName": "月巢"
+      "shortcutName": "月相"
     }
   },
   "scripts": {

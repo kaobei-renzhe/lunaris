@@ -1,11 +1,11 @@
-# 月巢 · MoonNest
+# 月相 · Lunaris
 
 <p align="center">
-  <img src="build/icon.png" width="120" alt="MoonNest logo" />
+  <img src="build/icon.png" width="120" alt="Lunaris logo" />
 </p>
 
 <p align="center">
-  本地优先的图片素材库：把照片、RAW 和设备管理收进一个「巢」里。
+  本地优先的图片素材库：照片、RAW 与器材管理，都归在这里。
 </p>
 
 <p align="center">
@@ -19,7 +19,7 @@
 
 ## 这是什么
 
-月巢是一个类似 Eagle 的本地图片管理工具：图片始终留在你自己的磁盘上，应用只维护一份索引数据库和缩略图缓存。除了常规的标签、文件夹、筛选、查重，还针对摄影工作流做了 RAW 内嵌预览、RAW + JPEG 配对、连拍堆叠、P/X/U 旗标，以及基于本地 Chinese-CLIP 模型的中文语义搜图和自动分类。
+月相是一个类似 Eagle 的本地图片管理工具：图片始终留在你自己的磁盘上，应用只维护一份索引数据库和缩略图缓存。除了常规的标签、文件夹、筛选、查重，还针对摄影工作流做了 RAW 内嵌预览、RAW + JPEG 配对、连拍堆叠、P/X/U 旗标，以及基于本地 Chinese-CLIP 模型的中文语义搜图和自动分类。
 
 ## 功能
 

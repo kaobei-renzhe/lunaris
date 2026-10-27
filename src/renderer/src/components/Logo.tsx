@@ -3,7 +3,7 @@ interface LogoProps {
   className?: string
 }
 
-/** 月巢的品牌标：银色月牙 + 巢形弧线 + 三颗素材蛋 */
+/** 月相的品牌标：紫罗兰星云里的一弯银月 */
 export default function Logo({ size = 28, className = '' }: LogoProps) {
   return (
     <svg
@@ -11,48 +11,54 @@ export default function Logo({ size = 28, className = '' }: LogoProps) {
       height={size}
       viewBox="0 0 512 512"
       className={className}
-      aria-label="月巢"
+      aria-label="月相"
       role="img"
     >
       <defs>
-        <linearGradient id="mn-logo-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#111a2b" />
-          <stop offset="1" stopColor="#0b0f18" />
+        <linearGradient id="lu-logo-bg" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stopColor="#1D1640" />
+          <stop offset="0.5" stopColor="#110D24" />
+          <stop offset="1" stopColor="#07050F" />
         </linearGradient>
-        <linearGradient id="mn-logo-moon" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#ffffff" />
-          <stop offset="1" stopColor="#b8cdf5" />
+        <radialGradient id="lu-logo-neb1" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor="#7B5CE8" stopOpacity="0.42" />
+          <stop offset="1" stopColor="#7B5CE8" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="lu-logo-neb2" cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor="#E85CA8" stopOpacity="0.26" />
+          <stop offset="1" stopColor="#E85CA8" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="lu-logo-moon" x1="0.05" y1="0.05" x2="0.9" y2="0.95">
+          <stop offset="0" stopColor="#FFFFFF" />
+          <stop offset="0.45" stopColor="#F2ECFF" />
+          <stop offset="1" stopColor="#C0B2E8" />
         </linearGradient>
-        <linearGradient id="mn-logo-nest" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0" stopColor="#7aa2f7" />
-          <stop offset="1" stopColor="#a78bfa" />
-        </linearGradient>
-        <mask id="mn-logo-cut">
+        <mask id="lu-logo-cut">
           <rect width="512" height="512" fill="#fff" />
-          <circle cx="252" cy="150" r="108" fill="#000" />
+          <circle cx="309.7" cy="196.1" r="138" fill="#000" />
         </mask>
       </defs>
-      <rect width="512" height="512" rx="120" fill="url(#mn-logo-bg)" />
-      <circle cx="256" cy="120" r="220" fill="#7aa2f7" opacity="0.08" />
-      <circle cx="196" cy="186" r="118" fill="url(#mn-logo-moon)" mask="url(#mn-logo-cut)" />
-      <path
-        d="M92 318 C136 424 376 424 420 318"
+      <rect width="512" height="512" rx="118" fill="url(#lu-logo-bg)" />
+      <circle cx="180" cy="200" r="230" fill="url(#lu-logo-neb1)" />
+      <circle cx="392" cy="356" r="210" fill="url(#lu-logo-neb2)" />
+      <circle
+        cx="250"
+        cy="258"
+        r="190"
         fill="none"
-        stroke="url(#mn-logo-nest)"
-        strokeWidth="38"
-        strokeLinecap="round"
+        stroke="#C9B8FF"
+        strokeOpacity="0.15"
+        strokeWidth="1.6"
       />
-      <path
-        d="M132 360 C176 436 336 436 380 360"
-        fill="none"
-        stroke="#5b7fd0"
-        strokeWidth="30"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
-      <circle cx="190" cy="330" r="24" fill="#f2c94c" />
-      <circle cx="256" cy="352" r="26" fill="#7aa2f7" />
-      <circle cx="322" cy="330" r="24" fill="#e86a92" />
+      <circle cx="250" cy="258" r="152" fill="url(#lu-logo-moon)" mask="url(#lu-logo-cut)" />
+      <g fill="#FFFFFF">
+        <circle cx="352" cy="152" r="4" fillOpacity="0.85" />
+        <circle cx="398" cy="196" r="2.6" fillOpacity="0.55" />
+        <circle cx="330" cy="212" r="2.2" fillOpacity="0.42" />
+        <circle cx="416" cy="148" r="2" fillOpacity="0.32" />
+      </g>
+      <circle cx="376" cy="240" r="2.6" fill="#F5B8D8" fillOpacity="0.6" />
+      <circle cx="424" cy="216" r="2" fill="#B8D8F5" fillOpacity="0.55" />
     </svg>
   )
 }

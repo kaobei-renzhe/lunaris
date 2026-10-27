@@ -17,10 +17,16 @@ export function downloadTargetDir(): string {
   return join(app.getPath('userData'), 'models', 'chinese-clip')
 }
 
+/** 改名前的 userData 目录名，见 index.ts 的 LEGACY_APP_DIRS */
+const LEGACY_APP_DIRS = ['image-nest', 'moonnest', '月巢']
+
 function candidates(): string[] {
   const list: string[] = []
   if (process.env.IMAGENEST_CLIP_DIR) list.push(process.env.IMAGENEST_CLIP_DIR)
   list.push(downloadTargetDir())
+  // 旧版本下过的模型直接复用，免得改名后的新装再拉 180 MB
+  const appData = app.getPath('appData')
+  for (const name of LEGACY_APP_DIRS) list.push(join(appData, name, 'models', 'chinese-clip'))
   list.push(join(app.getAppPath(), 'models', 'chinese-clip'))
   return list
 }

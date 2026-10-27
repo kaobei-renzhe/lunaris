@@ -24,7 +24,7 @@ const CSP = [
 
 function cspPlugin() {
   return {
-    name: 'moonnest-csp',
+    name: 'lunaris-csp',
     apply: 'build' as const,
     transformIndexHtml(html: string) {
       return html.replace(

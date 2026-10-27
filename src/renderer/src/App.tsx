@@ -966,7 +966,7 @@ export default function App() {
 
   if (booting) {
     return (
-      <div className="h-full grid place-items-center text-[var(--faint)] text-[13px]">正在唤醒月巢…</div>
+      <div className="h-full grid place-items-center text-[var(--faint)] text-[13px]">正在唤醒月相…</div>
     )
   }
 
@@ -1177,7 +1177,7 @@ export default function App() {
       {dragging && (
         <div className="absolute inset-0 z-40 grid place-items-center bg-[rgba(9,11,15,0.82)] backdrop-blur-sm pointer-events-none">
           <div className="px-10 py-8 rounded-2xl border-2 border-dashed border-[var(--accent)] text-center">
-            <div className="text-[16px] text-[var(--accent-2)] font-medium">松手就收进月巢</div>
+            <div className="text-[16px] text-[var(--accent-2)] font-medium">松手就收进图库</div>
             <div className="text-[12px] text-[var(--muted)] mt-1">支持文件夹递归导入</div>
           </div>
         </div>
