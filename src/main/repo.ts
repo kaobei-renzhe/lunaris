@@ -554,6 +554,17 @@ export function restoreItems(ids: number[]): void {
   tx(ids)
 }
 
+/** 把文件已丢失的记录一次性移入回收站，返回处理过的 id 以便撤销；不碰磁盘上的文件 */
+export function trashMissing(): number[] {
+  const ids = (
+    getDb()
+      .prepare('SELECT id FROM items WHERE trashed = 0 AND missing = 1')
+      .all() as Array<{ id: number }>
+  ).map((row) => row.id)
+  if (ids.length) trashItems(ids)
+  return ids
+}
+
 /**
  * 彻底删除记录与缓存文件，仅用于导入失败时的清理。
  */

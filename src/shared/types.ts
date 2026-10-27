@@ -394,6 +394,8 @@ export interface Api {
     patch: { rating?: number; note?: string; url?: string; flag?: number }
   ) => Promise<void>
   deleteItems: (ids: number[]) => Promise<void>
+  /** 清理文件已丢失的记录（软删除，可撤销），返回处理的 id */
+  trashMissing: () => Promise<number[]>
   restoreItems: (ids: number[]) => Promise<void>
   copyImage: (id: number) => Promise<boolean>
   stackItems: (ids: number[]) => Promise<number>

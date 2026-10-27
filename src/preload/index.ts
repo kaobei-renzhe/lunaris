@@ -27,6 +27,7 @@ const api: Api = {
   getItem: (id: number) => ipcRenderer.invoke('items:get', id),
   updateItem: (id: number, patch) => ipcRenderer.invoke('items:update', id, patch),
   deleteItems: (ids: number[]) => ipcRenderer.invoke('items:delete', ids),
+  trashMissing: () => ipcRenderer.invoke('items:trashMissing'),
   restoreItems: (ids: number[]) => ipcRenderer.invoke('items:restore', ids),
   copyImage: (id: number) => ipcRenderer.invoke('clipboard:copyImage', id),
   stackItems: (ids: number[]) => ipcRenderer.invoke('items:stack', ids),

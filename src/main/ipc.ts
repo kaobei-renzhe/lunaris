@@ -84,6 +84,7 @@ import {
   stats,
   thumbPathFor,
   trashItems,
+  trashMissing,
   unstack,
   updateItem
 } from './repo'
@@ -273,6 +274,11 @@ export function registerIpc(): void {
   ipcMain.handle('items:delete', (_e, ids: number[]) => {
     trashItems(ids)
     regroup()
+  })
+  ipcMain.handle('items:trashMissing', () => {
+    const ids = trashMissing()
+    if (ids.length) regroup()
+    return ids
   })
   ipcMain.handle('items:restore', (_e, ids: number[]) => {
     restoreItems(ids)

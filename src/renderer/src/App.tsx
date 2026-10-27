@@ -464,6 +464,29 @@ export default function App() {
     bump()
   }, [selectedIds, activeId, pushUndo, bump])
 
+  /** 丢失视图里一次性清理所有丢失记录：只动索引，不动磁盘，可撤销 */
+  const clearMissing = useCallback(async () => {
+    const snapshot = await window.api.stats()
+    if (!snapshot.missing) {
+      notify('没有可清理的丢失记录')
+      return
+    }
+    const ok = await window.api.confirm(
+      '清理丢失记录',
+      `将移除 ${snapshot.missing} 条文件已丢失的索引记录。磁盘上的原图不受影响，清理后可按 Ctrl+Z 撤销。`
+    )
+    if (!ok) return
+    const ids = await window.api.trashMissing()
+    if (!ids.length) return
+    setSelectedIds([])
+    setActiveId(null)
+    pushUndo(`已清理 ${ids.length} 条丢失记录，按 Ctrl+Z 撤销`, async () => {
+      await window.api.restoreItems(ids)
+      setTick((v) => v + 1)
+    })
+    bump()
+  }, [notify, pushUndo, bump])
+
   const rateSelected = useCallback(
     async (rating: number) => {
       const ids = selectedIds.length ? selectedIds : activeId ? [activeId] : []
@@ -1131,6 +1154,7 @@ export default function App() {
             onToggleSemantic={() => void toggleSemantic()}
             onAddToFolder={addSelectedToFolder}
             onDeleteSelected={deleteSelected}
+            onClearMissing={clearMissing}
             onClearSelection={() => setSelectedIds([])}
             onSaveSmart={saveSmart}
           />

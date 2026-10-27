@@ -45,6 +45,8 @@ interface ToolbarProps {
   onToggleSemantic: () => void
   onAddToFolder: (folderId: number) => void
   onDeleteSelected: () => void
+  /** 丢失视图里一次性清理所有丢失记录 */
+  onClearMissing: () => void
   onClearSelection: () => void
   onSaveSmart: (name: string) => void
 }
@@ -74,6 +76,7 @@ export default function Toolbar({
   onToggleSemantic,
   onAddToFolder,
   onDeleteSelected,
+  onClearMissing,
   onClearSelection,
   onSaveSmart
 }: ToolbarProps) {
@@ -263,6 +266,16 @@ export default function Toolbar({
           <option value={FLAG_FILTER_NOT_REJECTED}>— 非淘汰</option>
           <option value={FLAG_FILTER_NOT_PICKED}>— 非留用</option>
         </select>
+
+        {filter.missing && (
+          <button
+            className="btn h-7 px-2 text-[11.5px]"
+            onClick={onClearMissing}
+            title="把文件已丢失的索引记录移出图库；磁盘上的原图不受影响，可撤销"
+          >
+            <Trash2 size={12} /> 清理丢失记录
+          </button>
+        )}
 
         {aiReady && canSmartFilter && (
           <button
