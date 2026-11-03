@@ -470,6 +470,10 @@ export interface Api {
   pickAutoBackupDir: () => Promise<string | null>
   onAutoBackup: (cb: (result: AutoBackupResult) => void) => () => void
   clipStatus: () => Promise<ClipStatus>
+  /** 可用的内嵌语义模型（含是否已下载、是否正在使用、索引进度） */
+  listEmbeddingModels: () => Promise<EmbeddingModelInfo[]>
+  /** 切换语义模型：只改配置，旧模型索引保留，新模型需要重建索引 */
+  selectEmbeddingModel: (id: EmbeddingModelId) => Promise<ClipStatus>
   getClipAutoIndex: () => Promise<boolean>
   saveClipAutoIndex: (enabled: boolean) => Promise<boolean>
   onClipAutoStatus: (cb: (status: ClipStatus) => void) => () => void
@@ -481,7 +485,7 @@ export interface Api {
     limit?: number
   ) => Promise<{ items: Item[]; scores: number[] }>
   clipSimilar: (itemId: number, limit?: number) => Promise<{ items: Item[]; scores: number[] }>
-  clipDownloadModel: () => Promise<string>
+  clipDownloadModel: (id?: EmbeddingModelId) => Promise<string>
   onClipIndex: (cb: (progress: ClipProgress) => void) => () => void
   /** 语义索引结束（完成 / 取消 / 出错都会发），用来收起进度卡片 */
   onClipIndexEnd: (cb: () => void) => () => void
@@ -587,8 +591,27 @@ export interface AutoBackupResult {
   error?: string
 }
 
+/** 内嵌语义模型：换模型要重建索引，但新旧索引可以同时留在库里 */
+export type EmbeddingModelId = 'chinese-clip' | 'siglip2'
+
+export interface EmbeddingModelInfo {
+  id: EmbeddingModelId
+  label: string
+  note: string
+  /** 下载体积（字节） */
+  bytes: number
+  dim: number
+  ready: boolean
+  active: boolean
+  indexed: number
+  total: number
+}
+
 export interface ClipStatus {
   modelReady: boolean
+  modelId: EmbeddingModelId
+  modelLabel: string
+  modelBytes: number
   indexed: number
   total: number
   running: boolean
@@ -634,4 +657,10 @@ export interface AutoTagStatus {
   tagged: number
   indexed: number
   total: number
+  /** 当前语义模型，不同模型的相似度分布不同，阈值范围也要跟着换 */
+  modelId: EmbeddingModelId
+  modelLabel: string
+  thresholdMin: number
+  thresholdMax: number
+  thresholdStep: number
 }

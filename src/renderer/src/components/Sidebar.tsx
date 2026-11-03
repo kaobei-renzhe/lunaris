@@ -12,6 +12,7 @@ import {
   Folder,
   FolderPlus,
   Images,
+  Layers,
   Plus,
   RefreshCw,
   Settings as SettingsIcon,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react'
 import type {
   ClipStatus,
+  Facet,
   FilterState,
   Folder as FolderType,
   ImportDirNode,
@@ -93,6 +95,8 @@ interface SidebarProps {
   library: string
   stats: Stats
   tags: Tag[]
+  /** 人像维度：作为统一多级筛选树的父节点，取值挂在它下面 */
+  facets: Facet[]
   folders: FolderType[]
   smarts: SmartFolder[]
   dirTree: ImportDirNode[]
@@ -130,6 +134,7 @@ export default function Sidebar({
   library,
   stats,
   tags,
+  facets,
   folders,
   smarts,
   dirTree,
@@ -165,8 +170,8 @@ export default function Sidebar({
   const [dropTarget, setDropTarget] = useState<string | null>(null)
   /** 标签树里被折叠的父标签 */
   const [collapsedTags, setCollapsedTags] = useState<number[]>([])
-  /** 人像维度的取值默认不在标签树里出现，避免几十个维度值淹掉普通标签 */
-  const [showFacetTags, setShowFacetTags] = useState(false)
+  /** 人像维度：默认收起，展开后才列出该维度的取值 */
+  const [expandedFacets, setExpandedFacets] = useState<string[]>([])
   const [expandedDirs, setExpandedDirs] = useState<string[]>([])
   const [dirsOpen, setDirsOpen] = useState(true)
   /** 三个筛选区各自折叠，避免侧栏被长列表占满 */
@@ -221,8 +226,15 @@ export default function Sidebar({
   }
 
   const tagIds = filter.tagIds ?? []
+  const facetPicked = filter.facets ?? {}
+  const hasFacetFilter = Object.values(facetPicked).some((list) => list.length > 0)
   const isAll =
-    !filter.folderId && tagIds.length === 0 && !filter.missing && !filter.dir && !filter.errors
+    !filter.folderId &&
+    tagIds.length === 0 &&
+    !hasFacetFilter &&
+    !filter.missing &&
+    !filter.dir &&
+    !filter.errors
 
   /** 只比较筛选条件本身（忽略排序），用来判断哪个智能文件夹正生效 */
   const filterKey = (value: FilterState | SmartFolder['filter']): string =>
@@ -231,6 +243,12 @@ export default function Sidebar({
       folderId: value.folderId ?? null,
       dir: value.dir ?? null,
       tagIds: [...(value.tagIds ?? [])].sort((a, b) => a - b),
+      // 维度筛选也纳入比较，否则同一张智能文件夹在不同维度下都会亮
+      facets: Object.fromEntries(
+        Object.entries(value.facets ?? {})
+          .map(([key, list]) => [key, [...list].sort((a, b) => a - b)] as const)
+          .sort(([a], [b]) => a.localeCompare(b))
+      ),
       colorFamily: value.colorFamily ?? null,
       orientation: value.orientation ?? null,
       minRating: value.minRating ?? 0,
@@ -257,17 +275,39 @@ export default function Sidebar({
     onFilter({ ...filter, tagIds: tagIds.filter((t) => t !== id) })
   }
 
-  /** 多级标签树：维度取值默认不展开，避免几十个维度值把普通标签淹掉 */
-  const facetTagCount = tags.filter((tag) => tag.facetId).length
-  const visibleTags = showFacetTags ? tags : tags.filter((tag) => !tag.facetId)
-  const visibleTagIds = new Set(visibleTags.map((tag) => tag.id))
+  /** 选中/取消某个维度的取值；同一维度内多选取 OR，跨维度取 AND */
+  const toggleFacetValue = (facetId: string, valueId: number): void => {
+    const current = facetPicked[facetId] ?? []
+    const next = current.includes(valueId)
+      ? current.filter((id) => id !== valueId)
+      : [...current, valueId]
+    const facets = { ...facetPicked }
+    if (next.length > 0) facets[facetId] = next
+    else delete facets[facetId]
+    onFilter({ ...filter, facets, folderId: null })
+  }
+
+  const toggleFacetOpen = (facetId: string): void =>
+    setExpandedFacets((prev) =>
+      prev.includes(facetId) ? prev.filter((id) => id !== facetId) : [...prev, facetId]
+    )
+
+  /**
+   * 统一的多级筛选树：维度不是单独开关，而是树上的父节点；
+   * 维度取值本身就是标签，所以和普通标签共用同一套展开、选中与嵌套规则。
+   */
+  const knownTagIds = new Set(tags.map((tag) => tag.id))
   const childrenOf = new Map<number, Tag[]>()
-  for (const tag of visibleTags) {
-    const parent = tag.parentId != null && visibleTagIds.has(tag.parentId) ? tag.parentId : 0
+  for (const tag of tags) {
+    const parent = tag.parentId != null && knownTagIds.has(tag.parentId) ? tag.parentId : 0
     const list = childrenOf.get(parent) ?? []
     list.push(tag)
     childrenOf.set(parent, list)
   }
+
+  /** 普通标签的子节点；维度取值只挂在所属维度下面，避免重复出现 */
+  const subTagsOf = (id: number): Tag[] =>
+    (childrenOf.get(id) ?? []).filter((tag) => !tag.facetId)
 
   const isTagDrag = (event: ReactDragEvent): boolean =>
     event.dataTransfer.types.includes('application/x-imagenest-tag')
@@ -292,7 +332,7 @@ export default function Sidebar({
   }
 
   const renderTagTree = (tag: Tag, depth: number): ReactNode => {
-    const children = childrenOf.get(tag.id) ?? []
+    const children = subTagsOf(tag.id)
     const collapsed = collapsedTags.includes(tag.id)
     const active = tagIds.includes(tag.id)
     const key = `tag-${tag.id}`
@@ -362,6 +402,87 @@ export default function Sidebar({
           )}
         </div>
         {!collapsed && children.map((child) => renderTagTree(child, depth + 1))}
+      </div>
+    )
+  }
+
+  /** 维度节点：和普通标签在同一棵树上，展开后列出取值，取值下面还能继续挂子标签 */
+  const renderFacetNode = (facet: Facet): ReactNode => {
+    const picked = facetPicked[facet.id] ?? []
+    const open = expandedFacets.includes(facet.id)
+    const values = tags.filter((tag) => tag.facetId === facet.id)
+    return (
+      <div key={facet.id}>
+        <div
+          className={`side-item ${picked.length > 0 ? 'active' : ''}`}
+          style={{ paddingLeft: 6 }}
+          onClick={() => toggleFacetOpen(facet.id)}
+          title={
+            picked.length > 0
+              ? `${facet.name}：已选 ${picked.length} 个取值，点一下收起`
+              : `${facet.name}：展开后按取值筛选`
+          }
+        >
+          <button
+            className="w-3 h-3 grid place-items-center text-[var(--faint)] shrink-0"
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleFacetOpen(facet.id)
+            }}
+            title={open ? '收起取值' : '展开取值'}
+          >
+            {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          </button>
+          <Layers size={12} />
+          <span className="truncate">{facet.name}</span>
+          <span className={`count ${picked.length > 0 ? 'text-[var(--accent-2)]' : ''}`}>
+            {picked.length > 0 ? `${picked.length}/${values.length}` : values.length}
+          </span>
+        </div>
+        {open &&
+          values.map((value) => {
+            const active = picked.includes(value.id)
+            const children = subTagsOf(value.id)
+            const collapsed = collapsedTags.includes(value.id)
+            return (
+              <div key={value.id}>
+                <div
+                  className={`side-item ${active ? 'active' : ''}`}
+                  style={{ paddingLeft: 18 }}
+                  onClick={() => toggleFacetValue(facet.id, value.id)}
+                  title={`${facet.name}：${value.name}（同一维度多选取并集）`}
+                >
+                  {children.length > 0 ? (
+                    <button
+                      className="w-3 h-3 grid place-items-center text-[var(--faint)] shrink-0"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setCollapsedTags((prev) =>
+                          prev.includes(value.id)
+                            ? prev.filter((id) => id !== value.id)
+                            : [...prev, value.id]
+                        )
+                      }}
+                      title={collapsed ? '展开子标签' : '折叠子标签'}
+                    >
+                      {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+                    </button>
+                  ) : (
+                    <span className="w-3 shrink-0" />
+                  )}
+                  <span className="tag-dot" style={{ background: value.color }} />
+                  <span className="truncate">{value.name}</span>
+                  <span className="count">{value.count}</span>
+                </div>
+                {!collapsed && children.map((child) => renderTagTree(child, 2))}
+              </div>
+            )
+          })}
+        {open && values.length === 0 && (
+          <div className="px-2 py-1 pl-[18px] text-[11px] text-[var(--faint)]">
+            还没有取值，可在人像工作台里添加
+          </div>
+        )}
       </div>
     )
   }
@@ -556,22 +677,13 @@ export default function Sidebar({
         >
           {openSections.tags ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
           <span className="ml-1">标签</span>
-          {facetTagCount > 0 && (
-            <button
-              className="ml-1.5 px-1 h-[16px] rounded border border-[var(--border)] text-[9.5px] text-[var(--faint)] hover:text-[var(--text)]"
-              title="人像维度的取值默认不混进标签树，需要时再显示"
-              onClick={(event) => {
-                event.stopPropagation()
-                setShowFacetTags((prev) => !prev)
-              }}
-            >
-              {showFacetTags ? '隐藏维度' : `维度 ${facetTagCount}`}
-            </button>
-          )}
-          <span className="ml-auto text-[10px]">{visibleTags.length}</span>
+          <span className="ml-auto text-[10px]">{facets.length + subTagsOf(0).length}</span>
         </div>
-        {openSections.tags && (childrenOf.get(0) ?? []).map((tag) => renderTagTree(tag, 0))}
-        {openSections.tags && visibleTags.length === 0 && (
+
+        {/* 同一棵筛选树：普通标签与维度节点混在一起，层级一致、交互一致 */}
+        {openSections.tags && subTagsOf(0).map((tag) => renderTagTree(tag, 0))}
+        {openSections.tags && facets.map((facet) => renderFacetNode(facet))}
+        {openSections.tags && tags.length === 0 && facets.length === 0 && (
           <div className="px-2 py-1 text-[11px] text-[var(--faint)]">在右侧详情里给图片打标签</div>
         )}
 

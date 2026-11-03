@@ -1,82 +1,91 @@
-import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { app } from 'electron'
 import * as ort from 'onnxruntime-node'
 import sharp from 'sharp'
+import { getEmbeddingModel } from '../settings'
+import type { EmbeddingModelId } from '../../shared/types'
+import { EMBEDDING_MODELS, modelSpec, resolveModelDir as resolveDir, type EmbeddingModelSpec } from './models'
 import { BertTokenizer } from './tokenizer'
+import { SiglipTokenizer } from './siglipTokenizer'
 
-export const MODEL_TAG = 'chinese-clip-vit-base-patch16-int8'
-export const MODEL_FILE = 'model_quantized.onnx'
-export const VOCAB_FILE = 'vocab.txt'
-
-const IMAGE_SIZE = 224
-const MEAN = [0.48145466, 0.4578275, 0.40821073]
-const STD = [0.26862954, 0.26130258, 0.27577711]
-
-export function downloadTargetDir(): string {
-  return join(app.getPath('userData'), 'models', 'chinese-clip')
-}
-
-/** 改名前的 userData 目录名，见 index.ts 的 LEGACY_APP_DIRS */
-const LEGACY_APP_DIRS = ['image-nest', 'moonnest', '月巢']
-
-function candidates(): string[] {
-  const list: string[] = []
-  if (process.env.IMAGENEST_CLIP_DIR) list.push(process.env.IMAGENEST_CLIP_DIR)
-  list.push(downloadTargetDir())
-  // 旧版本下过的模型直接复用，免得改名后的新装再拉 180 MB
-  const appData = app.getPath('appData')
-  for (const name of LEGACY_APP_DIRS) list.push(join(appData, name, 'models', 'chinese-clip'))
-  list.push(join(app.getAppPath(), 'models', 'chinese-clip'))
-  return list
-}
-
-export function resolveModelDir(): string | null {
-  for (const dir of candidates()) {
-    if (existsSync(join(dir, MODEL_FILE)) && existsSync(join(dir, VOCAB_FILE))) return dir
-  }
-  return null
-}
-
-export function isModelReady(): boolean {
-  return resolveModelDir() !== null
-}
-
-interface Loaded {
+interface LoadedChinese {
+  kind: 'combined'
   session: ort.InferenceSession
   tokenizer: BertTokenizer
-  dir: string
 }
 
-let loaded: Promise<Loaded> | null = null
+interface LoadedSiglip {
+  kind: 'split'
+  vision: ort.InferenceSession
+  text: ort.InferenceSession
+  tokenizer: SiglipTokenizer
+}
 
-async function ensureLoaded(): Promise<Loaded> {
-  if (!loaded) {
-    loaded = (async () => {
-      const dir = resolveModelDir()
-      if (!dir) throw new Error('语义模型还没下载')
-      // 限制线程数：语义索引是后台功能，别把整机 CPU 吃满
-      const session = await ort.InferenceSession.create(join(dir, MODEL_FILE), {
-        intraOpNumThreads: 2,
-        interOpNumThreads: 1,
-        executionMode: 'sequential'
-      })
-      const tokenizer = new BertTokenizer(join(dir, VOCAB_FILE))
-      return { session, tokenizer, dir }
-    })().catch((error) => {
-      loaded = null
-      throw error
-    })
+type Loaded = LoadedChinese | LoadedSiglip
+
+const loaded = new Map<EmbeddingModelId, Promise<Loaded>>()
+
+export function activeModel(): EmbeddingModelSpec {
+  return EMBEDDING_MODELS[getEmbeddingModel()]
+}
+
+export function activeModelId(): EmbeddingModelId {
+  return getEmbeddingModel()
+}
+
+export function resolveModelDir(id: EmbeddingModelId = activeModelId()): string | null {
+  return resolveDir(id)
+}
+
+function sessionOptions(): ort.InferenceSession.SessionOptions {
+  return {
+    // 限制线程数：语义索引是后台功能，别把整机 CPU 吃满
+    intraOpNumThreads: 2,
+    interOpNumThreads: 1,
+    executionMode: 'sequential'
   }
-  return loaded
 }
 
-export function resetModel(): void {
-  loaded = null
+async function ensureLoaded(id: EmbeddingModelId): Promise<Loaded> {
+  const existing = loaded.get(id)
+  if (existing) return existing
+  const promise = (async () => {
+    const spec = modelSpec(id)
+    const dir = resolveModelDir(id)
+    if (!dir) throw new Error(`${spec.label} 模型还没下载`)
+
+    if (id === 'chinese-clip') {
+      const session = await ort.InferenceSession.create(
+        join(dir, 'model_quantized.onnx'),
+        sessionOptions()
+      )
+      return {
+        kind: 'combined',
+        session,
+        tokenizer: new BertTokenizer(join(dir, 'vocab.txt'))
+      } satisfies LoadedChinese
+    }
+
+    const [vision, text] = await Promise.all([
+      ort.InferenceSession.create(join(dir, 'vision_model_int8.onnx'), sessionOptions()),
+      ort.InferenceSession.create(join(dir, 'text_model_int8.onnx'), sessionOptions())
+    ])
+    return {
+      kind: 'split',
+      vision,
+      text,
+      tokenizer: new SiglipTokenizer(join(dir, 'tokenizer.json'))
+    } satisfies LoadedSiglip
+  })().catch((error) => {
+    loaded.delete(id)
+    throw error
+  })
+  loaded.set(id, promise)
+  return promise
 }
 
-function zeroImage(): ort.Tensor {
-  return new ort.Tensor('float32', new Float32Array(3 * IMAGE_SIZE * IMAGE_SIZE), [1, 3, IMAGE_SIZE, IMAGE_SIZE])
+export function resetModel(id?: EmbeddingModelId): void {
+  if (id) loaded.delete(id)
+  else loaded.clear()
 }
 
 function unit(vector: Float32Array): Float32Array {
@@ -94,41 +103,89 @@ export function dot(a: Float32Array, b: Float32Array): number {
   return sum
 }
 
-/**
- * 这个 ONNX 是「双塔合并」模型，必须同时喂三个输入；
- * 另一路用零图 / 空文本占位，实际输出互不影响。
- */
-export async function embedText(text: string): Promise<Float32Array> {
-  const { session, tokenizer } = await ensureLoaded()
-  const { ids, mask } = tokenizer.encode(text)
-  const output = await session.run({
-    input_ids: new ort.Tensor('int64', ids, [1, ids.length]),
-    attention_mask: new ort.Tensor('int64', mask, [1, mask.length]),
-    pixel_values: zeroImage()
-  })
-  return unit(output.text_embeds.data as Float32Array)
+/** 优先拿模型导出的 pooled embedding，兼容不同导出命名 */
+function pooledOutput(output: ort.InferenceSession.OnnxValueMapType, names: string[]): Float32Array {
+  for (const name of names) {
+    const tensor = output[name]
+    if (tensor && 'data' in tensor) {
+      const data = tensor.data
+      if (data instanceof Float32Array) return data
+    }
+  }
+  // 没有 pooled 输出时退到 last_hidden_state 的第一个 token
+  const hidden = output.last_hidden_state
+  if (hidden && 'dims' in hidden && hidden.data instanceof Float32Array) {
+    const dim = Number(hidden.dims[hidden.dims.length - 1])
+    return hidden.data.slice(0, dim)
+  }
+  throw new Error('模型没有返回可用的向量输出')
 }
 
-export async function embedImage(filePath: string): Promise<Float32Array> {
-  const { session } = await ensureLoaded()
+function imageTensor(spec: EmbeddingModelSpec, data: Buffer): ort.Tensor {
+  const size = spec.imageSize
+  const floats = new Float32Array(3 * size * size)
+  for (let i = 0; i < size * size; i++) {
+    for (let c = 0; c < 3; c++) {
+      floats[c * size * size + i] = (data[i * 3 + c] / 255 - spec.mean[c]) / spec.std[c]
+    }
+  }
+  return new ort.Tensor('float32', floats, [1, 3, size, size])
+}
+
+export async function embedText(text: string, id: EmbeddingModelId = activeModelId()): Promise<Float32Array> {
+  const spec = modelSpec(id)
+  const model = await ensureLoaded(id)
+
+  if (model.kind === 'combined') {
+    const { ids, mask } = model.tokenizer.encode(text)
+    const output = await model.session.run({
+      input_ids: new ort.Tensor('int64', ids, [1, ids.length]),
+      attention_mask: new ort.Tensor('int64', mask, [1, mask.length]),
+      // 双塔合并模型必须一起喂零图占位，实际不会影响文本向量
+      pixel_values: new ort.Tensor(
+        'float32',
+        new Float32Array(3 * spec.imageSize * spec.imageSize),
+        [1, 3, spec.imageSize, spec.imageSize]
+      )
+    })
+    return unit(pooledOutput(output, ['text_embeds']))
+  }
+
+  const { ids, mask } = model.tokenizer.encode(text, spec.maxTextLength)
+  const output = await model.text.run({
+    input_ids: new ort.Tensor('int64', ids, [1, ids.length]),
+    attention_mask: new ort.Tensor('int64', mask, [1, mask.length])
+  })
+  return unit(pooledOutput(output, ['text_embeds', 'pooler_output']))
+}
+
+export async function embedImage(
+  filePath: string,
+  id: EmbeddingModelId = activeModelId()
+): Promise<Float32Array> {
+  const spec = modelSpec(id)
+  const model = await ensureLoaded(id)
   const { data } = await sharp(filePath, { failOn: 'none' })
     .rotate()
-    .resize(IMAGE_SIZE, IMAGE_SIZE, { fit: 'cover' })
+    .resize(spec.imageSize, spec.imageSize, {
+      fit: spec.resizeFit,
+      kernel: spec.resizeKernel
+    })
     .removeAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true })
 
-  const floats = new Float32Array(3 * IMAGE_SIZE * IMAGE_SIZE)
-  for (let i = 0; i < IMAGE_SIZE * IMAGE_SIZE; i++) {
-    for (let c = 0; c < 3; c++) {
-      floats[c * IMAGE_SIZE * IMAGE_SIZE + i] = (data[i * 3 + c] / 255 - MEAN[c]) / STD[c]
-    }
+  if (model.kind === 'combined') {
+    const output = await model.session.run({
+      input_ids: new ort.Tensor('int64', BigInt64Array.from([101n, 102n]), [1, 2]),
+      attention_mask: new ort.Tensor('int64', BigInt64Array.from([1n, 1n]), [1, 2]),
+      pixel_values: imageTensor(spec, data)
+    })
+    return unit(pooledOutput(output, ['image_embeds']))
   }
 
-  const output = await session.run({
-    input_ids: new ort.Tensor('int64', BigInt64Array.from([101n, 102n]), [1, 2]),
-    attention_mask: new ort.Tensor('int64', BigInt64Array.from([1n, 1n]), [1, 2]),
-    pixel_values: new ort.Tensor('float32', floats, [1, 3, IMAGE_SIZE, IMAGE_SIZE])
+  const output = await model.vision.run({
+    pixel_values: imageTensor(spec, data)
   })
-  return unit(output.image_embeds.data as Float32Array)
+  return unit(pooledOutput(output, ['image_embeds', 'pooler_output']))
 }

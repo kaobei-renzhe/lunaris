@@ -2,18 +2,17 @@ import { existsSync } from 'node:fs'
 import sharp from 'sharp'
 import { getDb } from './db'
 import { filteredIds, getItem, getItemFile, getItemsByIds, thumbPathFor } from './repo'
-import { dot, embedImage, embedText, MODEL_TAG, resolveModelDir } from './clip/embedder'
+import {
+  activeModel,
+  dot,
+  embedImage,
+  embedText,
+  resolveModelDir
+} from './clip/embedder'
+import { EMBEDDING_MODELS, modelTotalBytes } from './clip/models'
 import { beginIndexing, endIndexing, isTagging } from './taskLock'
 import { log } from './logger'
-import type { FilterState, Item } from '../shared/types'
-
-export interface ClipStatus {
-  modelReady: boolean
-  indexed: number
-  total: number
-  running: boolean
-  dim: number
-}
+import type { ClipStatus, EmbeddingModelInfo, FilterState, Item } from '../shared/types'
 
 export interface ClipProgress {
   done: number
@@ -36,6 +35,7 @@ export function invalidateClipCache(): void {
 
 export function clipStatus(): ClipStatus {
   const db = getDb()
+  const model = activeModel()
   const total = (
     db.prepare('SELECT COUNT(*) AS c FROM items WHERE trashed = 0 AND missing = 0').get() as {
       c: number
@@ -48,9 +48,45 @@ export function clipStatus(): ClipStatus {
          JOIN items i ON i.id = e.item_id
          WHERE e.model = ? AND i.trashed = 0 AND i.missing = 0`
       )
-      .get(MODEL_TAG) as { c: number }
+      .get(model.tag) as { c: number }
   ).c
-  return { modelReady: resolveModelDir() !== null, indexed, total, running, dim: 512 }
+  return {
+    modelReady: resolveModelDir(model.id) !== null,
+    modelId: model.id,
+    modelLabel: model.label,
+    modelBytes: modelTotalBytes(model.id),
+    indexed,
+    total,
+    running,
+    dim: model.dim
+  }
+}
+
+/** 设置页展示用：每个模型的下载状态、当前是否启用、索引进度 */
+export function listEmbeddingModels(): EmbeddingModelInfo[] {
+  const db = getDb()
+  const total = (
+    db.prepare('SELECT COUNT(*) AS c FROM items WHERE trashed = 0 AND missing = 0').get() as {
+      c: number
+    }
+  ).c
+  const active = activeModel()
+  const countIndexed = db.prepare(
+    `SELECT COUNT(*) AS c FROM embeddings e
+     JOIN items i ON i.id = e.item_id
+     WHERE e.model = ? AND i.trashed = 0 AND i.missing = 0`
+  )
+  return Object.values(EMBEDDING_MODELS).map((spec) => ({
+    id: spec.id,
+    label: spec.label,
+    note: spec.note,
+    bytes: modelTotalBytes(spec.id),
+    dim: spec.dim,
+    ready: resolveModelDir(spec.id) !== null,
+    active: spec.id === active.id,
+    indexed: (countIndexed.get(spec.tag) as { c: number }).c,
+    total
+  }))
 }
 
 export function cancelClipIndex(): void {
@@ -70,7 +106,8 @@ export async function indexEmbeddings(
 ): Promise<{ indexed: number; failed: number; cancelled: boolean; stopped: boolean }> {
   if (running) return { indexed: 0, failed: 0, cancelled: true, stopped: false }
   if (isTagging()) throw new Error('正在做自动分类，等它完成再建索引')
-  if (!resolveModelDir()) throw new Error('语义模型还没下载')
+  const model = activeModel()
+  if (!resolveModelDir(model.id)) throw new Error(`${model.label} 模型还没下载`)
 
   running = true
   beginIndexing()
@@ -89,7 +126,7 @@ export async function indexEmbeddings(
          ORDER BY i.id
          LIMIT ?`
       )
-      .all(MODEL_TAG, options.limit && options.limit > 0 ? Math.floor(options.limit) : -1) as Array<{
+      .all(model.tag, options.limit && options.limit > 0 ? Math.floor(options.limit) : -1) as Array<{
       id: number
       name: string
     }>
@@ -134,10 +171,10 @@ export async function indexEmbeddings(
         if (!existsSync(source)) source = getItemFile(row.id) ?? ''
         try {
           if (!source || !existsSync(source)) throw new Error('文件不可用')
-          const vector = await embedImage(source)
+          const vector = await embedImage(source, model.id)
           insert.run(
             row.id,
-            MODEL_TAG,
+            model.tag,
             vector.length,
             Buffer.from(vector.buffer, vector.byteOffset, vector.byteLength)
           )
@@ -187,7 +224,7 @@ function loadVectors(): Map<number, Float32Array> {
   if (cache) return cache
   const rows = getDb()
     .prepare('SELECT item_id, vec FROM embeddings WHERE model = ?')
-    .all(MODEL_TAG) as Array<{ item_id: number; vec: Buffer }>
+    .all(activeModel().tag) as Array<{ item_id: number; vec: Buffer }>
   const map = new Map<number, Float32Array>()
   for (const row of rows) {
     const copy = new Float32Array(row.vec.byteLength / 4)
@@ -232,12 +269,15 @@ export async function searchByText(
 }
 
 export async function searchSimilar(itemId: number, limit = 200): Promise<ClipSearchResult> {
+  const model = activeModel()
   const row = getDb()
     .prepare('SELECT vec FROM embeddings WHERE item_id = ? AND model = ?')
-    .get(itemId, MODEL_TAG) as { vec: Buffer } | undefined
+    .get(itemId, model.tag) as { vec: Buffer } | undefined
   if (!row) {
     const item = getItem(itemId)
-    throw new Error(item ? '这张图还没有语义索引' : '图片不存在')
+    throw new Error(
+      item ? `这张图还没有 ${model.label} 索引，先重建一次语义索引` : '图片不存在'
+    )
   }
   const vector = new Float32Array(row.vec.byteLength / 4)
   Buffer.from(vector.buffer).set(row.vec)

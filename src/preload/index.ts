@@ -90,6 +90,8 @@ const api: Api = {
   saveAutoBackup: (patch) => ipcRenderer.invoke('settings:autoBackup:save', patch),
   pickAutoBackupDir: () => ipcRenderer.invoke('settings:autoBackup:pickDir'),
   clipStatus: () => ipcRenderer.invoke('clip:status'),
+  listEmbeddingModels: () => ipcRenderer.invoke('clip:models'),
+  selectEmbeddingModel: (id) => ipcRenderer.invoke('clip:selectModel', id),
   getClipAutoIndex: () => ipcRenderer.invoke('clip:autoIndex:get'),
   saveClipAutoIndex: (enabled: boolean) => ipcRenderer.invoke('clip:autoIndex:save', enabled),
   clipIndex: () => ipcRenderer.invoke('clip:index'),
@@ -98,7 +100,7 @@ const api: Api = {
     ipcRenderer.invoke('clip:searchText', query, filter, limit),
   clipSimilar: (itemId: number, limit?: number) =>
     ipcRenderer.invoke('clip:similar', itemId, limit),
-  clipDownloadModel: () => ipcRenderer.invoke('clip:download'),
+  clipDownloadModel: (id) => ipcRenderer.invoke('clip:download', id),
   autoTagCategories: () => ipcRenderer.invoke('clip:autoTagCategories'),
   getAutoTagSettings: () => ipcRenderer.invoke('clip:autoTagSettings:get'),
   saveAutoTagSettings: (patch) => ipcRenderer.invoke('clip:autoTagSettings:save', patch),

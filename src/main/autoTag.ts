@@ -1,14 +1,15 @@
 import { getDb } from './db'
 import { readConfig, updateConfig } from './settings'
 import { createTag } from './repo'
-import { MODEL_TAG, dot, embedText, resolveModelDir } from './clip/embedder'
+import { activeModel, dot, embedText, resolveModelDir } from './clip/embedder'
 import { beginTagging, endTagging, isIndexing } from './taskLock'
 import type {
   AutoTagCategory,
   AutoTagProgress,
   AutoTagResult,
   AutoTagSettings,
-  AutoTagStatus
+  AutoTagStatus,
+  EmbeddingModelId
 } from '../shared/types'
 
 interface CategorySpec extends AutoTagCategory {
@@ -89,9 +90,21 @@ export const AUTO_TAG_CATEGORIES: CategorySpec[] = [
   }
 ]
 
-const DEFAULT_THRESHOLD = 0.2
-const MIN_THRESHOLD = 0.15
-const MAX_THRESHOLD = 0.35
+interface ThresholdProfile {
+  min: number
+  max: number
+  fallback: number
+  step: number
+}
+
+/**
+ * 两个模型的余弦分布完全不同：Chinese-CLIP 正常匹配在 0.2–0.4，
+ * SigLIP 2 只有 0.05–0.1，共用一个阈值会让自动分类直接全空。
+ */
+const THRESHOLD_PROFILES: Record<EmbeddingModelId, ThresholdProfile> = {
+  'chinese-clip': { min: 0.15, max: 0.35, fallback: 0.2, step: 0.01 },
+  siglip2: { min: 0.02, max: 0.12, fallback: 0.06, step: 0.01 }
+}
 
 let running = false
 
@@ -99,38 +112,67 @@ export function listAutoTagCategories(): AutoTagCategory[] {
   return AUTO_TAG_CATEGORIES.map(({ name, color }) => ({ name, color }))
 }
 
-function clampThreshold(value: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_THRESHOLD
-  return Math.min(MAX_THRESHOLD, Math.max(MIN_THRESHOLD, Number(value.toFixed(2))))
+function profileFor(id: EmbeddingModelId): ThresholdProfile {
+  return THRESHOLD_PROFILES[id]
+}
+
+function clampThreshold(value: number, profile: ThresholdProfile): number {
+  if (!Number.isFinite(value)) return profile.fallback
+  return Math.min(profile.max, Math.max(profile.min, Number(value.toFixed(2))))
 }
 
 export function getAutoTagSettings(): AutoTagSettings {
+  const model = activeModel()
+  const profile = profileFor(model.id)
   const stored = readConfig().autoTag ?? {}
   const all = AUTO_TAG_CATEGORIES.map((category) => category.name)
   const picked = Array.isArray(stored.categories)
     ? stored.categories.filter((name) => all.includes(name))
     : []
+  // 老配置只有 threshold，按 Chinese-CLIP 的阈值沿用；SigLIP 2 用自己的默认值
+  const saved = stored.thresholds?.[model.id]
+  const legacy = model.id === 'chinese-clip' ? stored.threshold : undefined
+  const value = typeof saved === 'number' ? saved : typeof legacy === 'number' ? legacy : profile.fallback
   return {
-    threshold: typeof stored.threshold === 'number' ? clampThreshold(stored.threshold) : DEFAULT_THRESHOLD,
+    threshold: clampThreshold(value, profile),
     categories: picked.length > 0 ? picked : all
   }
 }
 
 export function saveAutoTagSettings(patch: Partial<AutoTagSettings>): AutoTagSettings {
+  const model = activeModel()
+  const profile = profileFor(model.id)
   const current = getAutoTagSettings()
   const all = AUTO_TAG_CATEGORIES.map((category) => category.name)
   const categories = (patch.categories ?? current.categories).filter((name) => all.includes(name))
   if (categories.length === 0) throw new Error('至少要保留一个类目')
-  const next: AutoTagSettings = {
-    threshold: clampThreshold(patch.threshold ?? current.threshold),
-    categories
+  const threshold = clampThreshold(patch.threshold ?? current.threshold, profile)
+  const stored = readConfig().autoTag ?? {}
+  const thresholds = { ...(stored.thresholds ?? {}) }
+  // 老配置里的 threshold 属于 Chinese-CLIP；先收进 thresholds，避免被另一个模型的保存覆盖
+  if (typeof stored.threshold === 'number' && thresholds['chinese-clip'] === undefined) {
+    thresholds['chinese-clip'] = clampThreshold(
+      stored.threshold,
+      THRESHOLD_PROFILES['chinese-clip']
+    )
   }
-  updateConfig({ autoTag: next })
+  thresholds[model.id] = threshold
+  const next: AutoTagSettings = { threshold, categories }
+  updateConfig({
+    autoTag: {
+      ...stored,
+      // 老字段继续保留 Chinese-CLIP 的阈值，读旧配置的代码不会串
+      threshold: thresholds['chinese-clip'] ?? threshold,
+      thresholds,
+      categories
+    }
+  })
   return next
 }
 
 export function autoTagStatus(): AutoTagStatus {
   const db = getDb()
+  const model = activeModel()
   const tagged = (
     db
       .prepare(
@@ -147,14 +189,24 @@ export function autoTagStatus(): AutoTagStatus {
          JOIN items i ON i.id = e.item_id
          WHERE e.model = ? AND i.trashed = 0 AND i.missing = 0`
       )
-      .get(MODEL_TAG) as { c: number }
+      .get(model.tag) as { c: number }
   ).c
   const total = (
     db.prepare('SELECT COUNT(*) AS c FROM items WHERE trashed = 0 AND missing = 0').get() as {
       c: number
     }
   ).c
-  return { tagged, indexed, total }
+  const profile = profileFor(model.id)
+  return {
+    tagged,
+    indexed,
+    total,
+    modelId: model.id,
+    modelLabel: model.label,
+    thresholdMin: profile.min,
+    thresholdMax: profile.max,
+    thresholdStep: profile.step
+  }
 }
 
 function normalize(vector: Float32Array): Float32Array {
@@ -185,7 +237,10 @@ function pruneEmptyTags(): void {
   for (const name of names) statement.run(name)
 }
 
-function syncTags(assignments: Map<number, { category: string; score: number }>): void {
+function syncTags(
+  assignments: Map<number, { category: string; score: number }>,
+  modelTag: string
+): void {
   const db = getDb()
   const previous = db.prepare('SELECT item_id, category FROM auto_tags').all() as Array<{
     item_id: number
@@ -219,7 +274,7 @@ function syncTags(assignments: Map<number, { category: string; score: number }>)
 
     for (const [itemId, entry] of assignments) {
       addLink.run(itemId, ensureTag(entry.category, tagCache))
-      upsert.run(itemId, entry.category, entry.score, MODEL_TAG)
+      upsert.run(itemId, entry.category, entry.score, modelTag)
     }
     pruneEmptyTags()
   })
@@ -231,7 +286,8 @@ export async function runAutoTag(
 ): Promise<AutoTagResult> {
   if (running) throw new Error('自动分类正在执行')
   if (isIndexing()) throw new Error('正在建立语义索引，等它跑完再分类')
-  if (!resolveModelDir()) throw new Error('语义模型还没下载，先在上面下载模型')
+  const model = activeModel()
+  if (!resolveModelDir(model.id)) throw new Error(`${model.label} 模型还没下载，先在上面下载模型`)
 
   const status = autoTagStatus()
   if (status.indexed === 0) throw new Error('还没有语义索引，先点「语义索引」建好再分类')
@@ -248,9 +304,9 @@ export async function runAutoTag(
     const promptTotal = active.reduce((sum, category) => sum + category.prompts.length, 0)
     let prepared = 0
     for (const category of active) {
-      const sum = new Float32Array(512)
+      const sum = new Float32Array(model.dim)
       for (const prompt of category.prompts) {
-        const vector = await embedText(prompt)
+        const vector = await embedText(prompt, model.id)
         for (let i = 0; i < sum.length; i++) sum[i] += vector[i] ?? 0
         prepared++
         onProgress({ phase: 'prepare', done: prepared, total: promptTotal, current: category.name })
@@ -265,7 +321,7 @@ export async function runAutoTag(
          JOIN items i ON i.id = e.item_id
          WHERE e.model = ? AND i.trashed = 0 AND i.missing = 0`
       )
-      .all(MODEL_TAG) as Array<{ item_id: number; vec: Buffer }>
+      .all(model.tag) as Array<{ item_id: number; vec: Buffer }>
 
     const assignments = new Map<number, { category: string; score: number }>()
     const counts: Record<string, number> = {}
@@ -293,7 +349,7 @@ export async function runAutoTag(
     }
 
     // 3. 同步成普通标签（自动打的标签也能直接筛选）
-    syncTags(assignments)
+    syncTags(assignments, model.tag)
 
     return { total: rows.length, assigned: assignments.size, counts }
   } finally {

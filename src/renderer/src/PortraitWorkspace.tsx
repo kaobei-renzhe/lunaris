@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { ArrowLeft, Camera, Plus, RefreshCw, Trash2, X } from 'lucide-react'
-import type { Facet, FacetValue, Item } from '@shared/types'
+import { ArrowLeft, Camera, Folder as FolderIcon, Images, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import type { Facet, FacetValue, Folder, Item } from '@shared/types'
 import { photoUrl, thumbUrl } from './lib/format'
 import Lightbox from './components/Lightbox'
 
@@ -17,6 +17,9 @@ const PAGE_LIMIT = 500
  */
 export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
   const [facets, setFacets] = useState<Facet[]>([])
+  const [folders, setFolders] = useState<Folder[]>([])
+  /** 文件夹与维度条件叠加：先用文件夹缩小范围，再按维度细筛 */
+  const [folderId, setFolderId] = useState<number | null>(null)
   const [items, setItems] = useState<Item[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -35,10 +38,18 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
     setFacets(await window.api.listFacets())
   }, [])
 
+  const loadFolders = useCallback(async () => {
+    setFolders(await window.api.listFolders())
+  }, [])
+
   const loadItems = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await window.api.listItems({ facets: picked, sort: 'added' }, 0, PAGE_LIMIT)
+      const result = await window.api.listItems(
+        { facets: picked, folderId, sort: 'added' },
+        0,
+        PAGE_LIMIT
+      )
       setItems(result.items)
       setTotal(result.total)
     } catch (error) {
@@ -46,11 +57,15 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
     } finally {
       setLoading(false)
     }
-  }, [picked])
+  }, [picked, folderId])
 
   useEffect(() => {
     void loadFacets().catch((error) => setMessage(`读取维度失败：${(error as Error).message}`))
   }, [loadFacets])
+
+  useEffect(() => {
+    void loadFolders().catch((error) => setMessage(`读取文件夹失败：${(error as Error).message}`))
+  }, [loadFolders])
 
   useEffect(() => {
     void loadItems()
@@ -76,6 +91,7 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
     }
     return map
   }, [facets])
+  const activeFolder = folderId !== null ? folders.find((folder) => folder.id === folderId) : null
 
   const toggleFilter = (facetId: string, valueId: number): void => {
     setPicked((prev) => {
@@ -188,6 +204,17 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
         <Camera size={15} color="var(--accent-2)" />
         <span className="text-[13.5px] font-medium">人像工作台</span>
         <div className="flex items-center gap-1 ml-3 flex-wrap">
+          {activeFolder && (
+            <button
+              className="inline-flex items-center gap-1 h-[22px] px-1.5 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] text-[11px]"
+              onClick={() => setFolderId(null)}
+              title="移除文件夹条件"
+            >
+              <FolderIcon size={11} />
+              {activeFolder.name}
+              <X size={10} />
+            </button>
+          )}
           {facets.flatMap((facet) =>
             (picked[facet.id] ?? []).map((valueId) => {
               const value = facet.values.find((entry) => entry.id === valueId)
@@ -217,8 +244,8 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
         </span>
         <button
           className="btn h-7 px-2 text-[11.5px]"
-          onClick={() => void Promise.all([loadItems(), loadFacets()])}
-          title="重新读取维度与照片"
+          onClick={() => void Promise.all([loadItems(), loadFacets(), loadFolders()])}
+          title="重新读取文件夹、维度与照片"
         >
           <RefreshCw size={12} /> 刷新
         </button>
@@ -231,8 +258,56 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
       )}
 
       <div className="flex-1 flex min-h-0">
-        {/* 左：维度 */}
+        {/* 左：文件夹 + 维度 */}
         <aside className="w-[228px] shrink-0 border-r border-[var(--border)] overflow-y-auto px-2 py-3">
+          <div className="mb-3">
+            <div className="flex items-center gap-1.5 px-1 mb-1.5">
+              <FolderIcon size={12} className="text-[var(--faint)]" />
+              <span className="text-[11.5px] text-[var(--text)]">文件夹</span>
+              <span className="ml-auto text-[10px] text-[var(--faint)] tabular-nums">
+                {folders.length}
+              </span>
+            </div>
+            <button
+              className={`w-full flex items-center gap-1.5 h-[26px] px-1.5 rounded-md text-[11.5px] transition-colors ${
+                folderId === null
+                  ? 'bg-[var(--accent-soft)] text-[var(--accent-text)]'
+                  : 'text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]'
+              }`}
+              onClick={() => setFolderId(null)}
+            >
+              <Images size={12} />
+              全部照片
+            </button>
+            {folders.map((folder) => {
+              const active = folderId === folder.id
+              return (
+                <button
+                  key={folder.id}
+                  className={`w-full flex items-center gap-1.5 h-[26px] px-1.5 rounded-md text-[11.5px] transition-colors ${
+                    active
+                      ? 'bg-[var(--accent-soft)] text-[var(--accent-text)]'
+                      : 'text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--text)]'
+                  }`}
+                  onClick={() => setFolderId(active ? null : folder.id)}
+                  title={folder.name}
+                >
+                  <FolderIcon size={12} />
+                  <span className="truncate">{folder.name}</span>
+                  <span className="ml-auto text-[10px] text-[var(--faint)] tabular-nums">
+                    {folder.count}
+                  </span>
+                </button>
+              )
+            })}
+            {folders.length === 0 && (
+              <div className="px-1 py-0.5 text-[10.5px] text-[var(--faint)]">
+                还没有文件夹，可在图库里新建
+              </div>
+            )}
+          </div>
+          <div className="my-3 border-t border-[var(--border)]" />
+
           {facets.map((facet) => {
             const active = picked[facet.id] ?? []
             return (

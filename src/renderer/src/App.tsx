@@ -5,6 +5,8 @@ import type {
   ClipDownloadProgress,
   ClipProgress,
   ClipStatus,
+  EmbeddingModelId,
+  Facet,
   FilterState,
   Folder,
   ImportDirNode,
@@ -59,6 +61,7 @@ export default function App() {
   const [items, setItems] = useState<Item[]>([])
   const [total, setTotal] = useState(0)
   const [tags, setTags] = useState<Tag[]>([])
+  const [facets, setFacets] = useState<Facet[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [smarts, setSmarts] = useState<SmartFolder[]>([])
   const [dirTree, setDirTree] = useState<ImportDirNode[]>([])
@@ -171,18 +174,20 @@ export default function App() {
   const { lightboxId, revealTick, openLightbox, closeLightbox } = useLightbox(restoreSelection)
 
   const refreshMeta = useCallback(async () => {
-    const [nextTags, nextFolders, nextSmarts, nextStats, nextDirs] = await Promise.all([
+    const [nextTags, nextFolders, nextSmarts, nextStats, nextDirs, nextFacets] = await Promise.all([
       window.api.listTags(),
       window.api.listFolders(),
       window.api.listSmart(),
       window.api.stats(),
-      window.api.listDirTree()
+      window.api.listDirTree(),
+      window.api.listFacets()
     ])
     setTags(nextTags)
     setFolders(nextFolders)
     setSmarts(nextSmarts)
     setStats(nextStats)
     setDirTree(nextDirs)
+    setFacets(nextFacets)
   }, [])
 
   useEffect(() => {
@@ -935,10 +940,10 @@ export default function App() {
     }
   }
 
-  const downloadClipModel = async (): Promise<boolean> => {
+  const downloadClipModel = async (modelId?: EmbeddingModelId): Promise<boolean> => {
     try {
       setClipDownload({ received: 0, total: 0, file: '' })
-      await window.api.clipDownloadModel()
+      await window.api.clipDownloadModel(modelId)
       setToast({ text: '语义模型下载完成' })
       setClipStatus(await window.api.clipStatus())
       return true
@@ -975,10 +980,10 @@ export default function App() {
     if (!status.modelReady) {
       const ok = await window.api.confirm(
         '语义搜索需要先下载模型',
-        '中文 CLIP 模型约 182MB，只会下载一次，保存到本机。继续吗？'
+        `${status.modelLabel} 模型约 ${formatBytes(status.modelBytes)}，只会下载一次，保存到本机。继续吗？`
       )
       if (!ok) return
-      if (!(await downloadClipModel())) return
+      if (!(await downloadClipModel(status.modelId))) return
     }
     await startClipIndex()
   }
@@ -994,10 +999,10 @@ export default function App() {
     if (!status.modelReady) {
       const ok = await window.api.confirm(
         '语义搜索需要先下载模型',
-        '中文 CLIP 模型约 182MB，只会下载一次，保存到本机。继续吗？'
+        `${status.modelLabel} 模型约 ${formatBytes(status.modelBytes)}，只会下载一次，保存到本机。继续吗？`
       )
       if (!ok) return
-      const ready = await downloadClipModel()
+      const ready = await downloadClipModel(status.modelId)
       if (!ready) return
     }
 
@@ -1095,6 +1100,7 @@ export default function App() {
           library={library}
           stats={stats}
           tags={tags}
+          facets={facets}
           folders={folders}
           smarts={smarts}
           dirTree={dirTree}
@@ -1304,7 +1310,7 @@ export default function App() {
       />
 
       {clipDownload && (
-        <div className="absolute bottom-[86px] left-1/2 -translate-x-1/2 z-40 w-[360px] rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 shadow-2xl">
+        <div className="absolute bottom-[86px] left-1/2 -translate-x-1/2 z-[60] w-[360px] rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 shadow-2xl">
           <div className="flex items-center justify-between text-[12px] mb-2">
             <span className="text-[var(--muted)] truncate pr-3">正在下载语义模型</span>
             <span className="text-[var(--text)] tabular-nums">

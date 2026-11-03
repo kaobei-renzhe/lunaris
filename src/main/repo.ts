@@ -340,16 +340,18 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
     params.push(...subtree)
   }
 
-  // 人像维度：同一维度内 OR（IN），维度之间 AND（多个 EXISTS）
-  for (const [facetId, tagIds] of Object.entries(filter.facets ?? {})) {
+  // 人像维度：同一维度内 OR（IN），维度之间 AND（多个 EXISTS）；
+  // 取值下如果还挂了子标签，选中取值时连整棵子树一起命中，和普通标签的多级语义保持一致
+  for (const tagIds of Object.values(filter.facets ?? {})) {
     const picked = (tagIds ?? []).filter((id) => Number.isFinite(id))
     if (!picked.length) continue
+    const subtree = [...new Set(picked.flatMap((id) => tagSubtreeIds(id)))]
     where.push(
-      `EXISTS (SELECT 1 FROM item_tags itf JOIN tags tf ON tf.id = itf.tag_id
-               WHERE itf.item_id = i.id AND tf.facet_id = ?
-                 AND itf.tag_id IN (${picked.map(() => '?').join(',')}))`
+      `EXISTS (SELECT 1 FROM item_tags itf
+               WHERE itf.item_id = i.id
+                 AND itf.tag_id IN (${subtree.map(() => '?').join(',')}))`
     )
-    params.push(facetId, ...picked)
+    params.push(...subtree)
   }
 
   const q = (filter.query ?? '').trim()

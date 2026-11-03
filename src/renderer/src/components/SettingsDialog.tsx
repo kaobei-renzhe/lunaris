@@ -12,7 +12,7 @@ import {
   Sun,
   X
 } from 'lucide-react'
-import type { LibraryStorage, ThemeMode } from '@shared/types'
+import type { EmbeddingModelId, EmbeddingModelInfo, LibraryStorage, ThemeMode } from '@shared/types'
 import type { LlmConfig, LlmStatus, LlmTestResult } from '@shared/llm'
 import { findSkin, SKINS, type SkinId } from '@shared/skins'
 import {
@@ -72,6 +72,9 @@ export default function SettingsDialog({
   const [saving, setSaving] = useState(false)
   const [skinSaving, setSkinSaving] = useState(false)
   const [autoClip, setAutoClip] = useState<boolean | null>(null)
+  const [embeddingModels, setEmbeddingModels] = useState<EmbeddingModelInfo[] | null>(null)
+  const [modelBusy, setModelBusy] = useState<EmbeddingModelId | null>(null)
+  const [modelMsg, setModelMsg] = useState<string | null>(null)
   const [scoreMinRating, setScoreMinRating] = useState<number | null>(null)
   const [scoreCounts, setScoreCounts] = useState<{ matched: number; total: number } | null>(null)
   const [scoreBusy, setScoreBusy] = useState(false)
@@ -95,6 +98,10 @@ export default function SettingsDialog({
       .getClipAutoIndex()
       .then(setAutoClip)
       .catch(() => setAutoClip(true))
+    void window.api
+      .listEmbeddingModels()
+      .then(setEmbeddingModels)
+      .catch(() => setEmbeddingModels(null))
     void window.api
       .getAiScoreMinRating()
       .then(setScoreMinRating)
@@ -270,6 +277,62 @@ export default function SettingsDialog({
     if (autoClip === null) return
     const next = await window.api.saveClipAutoIndex(!autoClip)
     setAutoClip(next)
+  }
+
+  const refreshModels = async (): Promise<void> => {
+    try {
+      setEmbeddingModels(await window.api.listEmbeddingModels())
+    } catch {
+      /* 读取失败保留旧值，下次打开设置再刷新 */
+    }
+  }
+
+  const switchModel = async (id: EmbeddingModelId, label: string): Promise<boolean> => {
+    setModelBusy(id)
+    setModelMsg(null)
+    try {
+      const status = await window.api.selectEmbeddingModel(id)
+      setModelMsg(
+        status.total > status.indexed
+          ? `已切换到 ${label}，还有 ${status.total - status.indexed} 张照片需要重建索引`
+          : `已切换到 ${label}`
+      )
+      await refreshModels()
+      return true
+    } catch (error) {
+      setModelMsg(`切换失败：${(error as Error).message}`)
+      return false
+    } finally {
+      setModelBusy(null)
+    }
+  }
+
+  const downloadAndSwitchModel = async (model: EmbeddingModelInfo): Promise<void> => {
+    if (modelBusy) return
+    setModelBusy(model.id)
+    setModelMsg(null)
+    try {
+      await window.api.clipDownloadModel(model.id)
+      const ok = await switchModel(model.id, model.label)
+      if (ok) {
+        setModelMsg(
+          `已下载并切换到 ${model.label}；点侧栏「语义索引」或等闲时自动建立索引后就能用`
+        )
+      }
+    } catch (error) {
+      setModelMsg(`下载失败：${(error as Error).message}`)
+    } finally {
+      setModelBusy(null)
+    }
+  }
+
+  const useExistingModel = async (model: EmbeddingModelInfo): Promise<void> => {
+    if (modelBusy || model.active) return
+    const ok = await window.api.confirm(
+      `切换到 ${model.label}？`,
+      '旧模型的索引会保留，但新模型需要重新建立语义索引才能用于搜图与自动分类。'
+    )
+    if (ok) await switchModel(model.id, model.label)
   }
 
   const pick = async (mode: ThemeMode): Promise<void> => {
@@ -724,7 +787,70 @@ export default function SettingsDialog({
 
             {tab === 'semantic' && (
               <>
-                <div className="text-[12.5px]">语义索引</div>
+                <div className="text-[12.5px]">语义模型</div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] divide-y divide-[var(--border)]">
+                  {embeddingModels ? (
+                    embeddingModels.map((model) => (
+                      <div key={model.id} className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[12.5px]">{model.label}</span>
+                          {model.active && (
+                            <span className="text-[9.5px] px-1.5 py-[1px] rounded border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-text)]">
+                              使用中
+                            </span>
+                          )}
+                          {!model.ready && (
+                            <span className="text-[9.5px] px-1.5 py-[1px] rounded border border-[var(--border)] bg-[var(--panel)] text-[var(--faint)]">
+                              未下载
+                            </span>
+                          )}
+                          <span className="ml-auto text-[10.5px] text-[var(--faint)] tabular-nums">
+                            {formatBytes(model.bytes)} · {model.dim} 维
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] text-[var(--faint)] mt-0.5 leading-4">
+                          {model.note}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-[10.5px] text-[var(--faint)] tabular-nums">
+                            已索引 {model.indexed}/{model.total}
+                          </span>
+                          <div className="ml-auto">
+                            {model.active && model.ready ? null : model.ready ? (
+                              <button
+                                className="btn h-6 px-2 text-[11px]"
+                                disabled={modelBusy !== null}
+                                onClick={() => void useExistingModel(model)}
+                              >
+                                切换使用
+                              </button>
+                            ) : (
+                              <button
+                                className="btn h-6 px-2 text-[11px]"
+                                disabled={modelBusy !== null}
+                                onClick={() => void downloadAndSwitchModel(model)}
+                              >
+                                {modelBusy === model.id ? '下载中…' : '下载并使用'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-[11px] text-[var(--faint)]">读取中…</div>
+                  )}
+                </div>
+                {modelMsg && (
+                  <div className="text-[10.5px] leading-4 text-[var(--accent-text)]">{modelMsg}</div>
+                )}
+                <div className="text-[10.5px] leading-4 text-[var(--faint)]">
+                  切换模型不会删除旧索引，但新模型需要重建语义索引才能搜图与自动分类。
+                  SigLIP 2 的相似度分布和 Chinese-CLIP 不同，阈值要重新试跑；本地实测它的中文类目弱于
+                  Chinese-CLIP，建议先小范围对比再决定。
+                </div>
+
+                <div className="mt-2 text-[12.5px]">语义索引</div>
                 <div className="flex items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5">
                   <div className="min-w-0">
                     <div className="text-[12.5px]">闲时自动建立语义索引</div>

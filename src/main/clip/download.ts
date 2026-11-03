@@ -1,9 +1,8 @@
 import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { get } from 'node:https'
-import { downloadTargetDir, MODEL_FILE, VOCAB_FILE } from './embedder'
-
-const BASE = 'https://hf-mirror.com/Xenova/chinese-clip-vit-base-patch16/resolve/main/'
+import type { EmbeddingModelId } from '../../shared/types'
+import { modelDirFor, modelSpec } from './models'
 
 export interface DownloadProgress {
   received: number
@@ -11,12 +10,7 @@ export interface DownloadProgress {
   file: string
 }
 
-const FILES = [
-  { name: MODEL_FILE, url: `${BASE}onnx/${MODEL_FILE}`, size: 190_842_404 },
-  { name: VOCAB_FILE, url: `${BASE}${VOCAB_FILE}`, size: 109_540 }
-]
-
-let inFlight: Promise<string> | null = null
+const inFlight = new Map<EmbeddingModelId, Promise<string>>()
 
 function fetchTo(
   url: string,
@@ -69,13 +63,17 @@ function fetchTo(
   })
 }
 
-async function doDownload(onProgress: (progress: DownloadProgress) => void): Promise<string> {
-  const dir = downloadTargetDir()
+async function doDownload(
+  id: EmbeddingModelId,
+  onProgress: (progress: DownloadProgress) => void
+): Promise<string> {
+  const spec = modelSpec(id)
+  const dir = modelDirFor(id)
   mkdirSync(dir, { recursive: true })
-  const total = FILES.reduce((sum, file) => sum + file.size, 0)
+  const total = spec.files.reduce((sum, file) => sum + file.size, 0)
   let base = 0
 
-  for (const file of FILES) {
+  for (const file of spec.files) {
     const target = join(dir, file.name)
     if (existsSync(target) && statSync(target).size === file.size) {
       base += file.size
@@ -124,24 +122,15 @@ async function doDownload(onProgress: (progress: DownloadProgress) => void): Pro
 }
 
 export function downloadModel(
+  id: EmbeddingModelId,
   onProgress: (progress: DownloadProgress) => void
 ): Promise<string> {
   // 连点两次时复用同一个下载任务，避免互删 .part
-  if (inFlight) return inFlight
-  inFlight = doDownload(onProgress).finally(() => {
-    inFlight = null
+  const existing = inFlight.get(id)
+  if (existing) return existing
+  const task = doDownload(id, onProgress).finally(() => {
+    inFlight.delete(id)
   })
-  return inFlight
-}
-
-export function modelDownloadComplete(): boolean {
-  const dir = downloadTargetDir()
-  return FILES.every((file) => {
-    const path = join(dir, file.name)
-    return existsSync(path) && statSync(path).size === file.size
-  })
-}
-
-export function modelDirForDisplay(): string {
-  return join(dirname(downloadTargetDir()), 'chinese-clip')
+  inFlight.set(id, task)
+  return task
 }

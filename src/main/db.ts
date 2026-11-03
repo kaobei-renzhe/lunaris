@@ -143,11 +143,13 @@ function migrate(db: Database.Database): void {
       name TEXT,
       created_at INTEGER NOT NULL
     );
+    -- 每张图每个模型一条向量：换模型时旧索引保留，重建不会互相覆盖
     CREATE TABLE IF NOT EXISTS embeddings (
-      item_id INTEGER PRIMARY KEY,
+      item_id INTEGER NOT NULL,
       model TEXT NOT NULL,
       dim INTEGER NOT NULL,
-      vec BLOB NOT NULL
+      vec BLOB NOT NULL,
+      PRIMARY KEY (item_id, model)
     );
     CREATE TABLE IF NOT EXISTS auto_tags (
       item_id INTEGER PRIMARY KEY,
@@ -190,6 +192,36 @@ function migrate(db: Database.Database): void {
 
   seedFacets(db)
   backfillDirs(db)
+  migrateEmbeddings(db)
+}
+
+/**
+ * 旧库的 embeddings 以 item_id 为主键，只能存一个模型。
+ * 改成 (item_id, model) 联合主键，让 Chinese-CLIP 与 SigLIP 2 的索引可以共存。
+ */
+function migrateEmbeddings(db: Database.Database): void {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'embeddings'")
+    .get() as { sql: string } | undefined
+  if (!row || /PRIMARY KEY\s*\(\s*item_id\s*,\s*model\s*\)/i.test(row.sql)) return
+
+  const tx = db.transaction(() => {
+    db.exec(`
+      DROP TABLE IF EXISTS embeddings_v2;
+      CREATE TABLE embeddings_v2 (
+        item_id INTEGER NOT NULL,
+        model TEXT NOT NULL,
+        dim INTEGER NOT NULL,
+        vec BLOB NOT NULL,
+        PRIMARY KEY (item_id, model)
+      );
+      INSERT OR IGNORE INTO embeddings_v2(item_id, model, dim, vec)
+        SELECT item_id, model, dim, vec FROM embeddings;
+      DROP TABLE embeddings;
+      ALTER TABLE embeddings_v2 RENAME TO embeddings;
+    `)
+  })
+  tx()
 }
 
 /** 内置维度与取值：只在 facets 表为空时种一次，之后用户改名/删维度都不会被覆盖 */

@@ -119,7 +119,10 @@ export default function AutoTagDialog({ onClose, onFinished }: AutoTagDialogProp
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="text-[11.5px] text-[var(--muted)] leading-5">
             用本地语义模型判断图片属于哪一类，结果会写成普通标签，可以照常筛选、改名、删除。
-            目前 {status ? `已索引 ${status.indexed}/${status.total} 张，已自动分类 ${status.tagged} 张` : '读取中…'}
+            目前{' '}
+            {status
+              ? `使用 ${status.modelLabel} · 已索引 ${status.indexed}/${status.total} 张，已自动分类 ${status.tagged} 张`
+              : '读取中…'}
           </div>
 
           {status && status.indexed < status.total && (
@@ -138,9 +141,9 @@ export default function AutoTagDialog({ onClose, onFinished }: AutoTagDialogProp
             </div>
             <input
               type="range"
-              min={0.15}
-              max={0.35}
-              step={0.01}
+              min={status?.thresholdMin ?? 0.15}
+              max={status?.thresholdMax ?? 0.35}
+              step={status?.thresholdStep ?? 0.01}
               value={settings.threshold}
               disabled={running}
               onChange={(e) => patch({ threshold: Number(e.target.value) })}

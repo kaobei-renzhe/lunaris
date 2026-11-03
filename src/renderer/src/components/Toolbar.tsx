@@ -86,12 +86,17 @@ export default function Toolbar({
   const [filtersOpen, setFiltersOpen] = useState(true)
 
   const patch = (next: Partial<FilterState>): void => onFilter({ ...filter, ...next })
+  const facetCount = Object.values(filter.facets ?? {}).reduce(
+    (sum, list) => sum + list.length,
+    0
+  )
   const hasFilter =
     Boolean(filter.query) ||
     Boolean(filter.folderId) ||
     Boolean(filter.dir) ||
     Boolean(filter.errors) ||
     (filter.tagIds?.length ?? 0) > 0 ||
+    facetCount > 0 ||
     Boolean(filter.colorFamily) ||
     Boolean(filter.orientation) ||
     Boolean(filter.flag) ||
@@ -116,7 +121,8 @@ export default function Toolbar({
     (filter.minAiScore ?? 0) > 0,
     filter.unscored,
     (filter.onlyIds?.length ?? 0) > 0,
-    (filter.tagIds?.length ?? 0) > 0
+    (filter.tagIds?.length ?? 0) > 0,
+    facetCount > 0
   ].filter(Boolean).length
 
   const commitSmart = (): void => {
@@ -364,6 +370,7 @@ export default function Toolbar({
                 folderId: null,
                 dir: null,
                 tagIds: [],
+                facets: {},
                 colorFamily: null,
                 orientation: null,
                 minRating: 0,

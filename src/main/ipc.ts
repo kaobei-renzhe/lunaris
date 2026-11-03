@@ -19,6 +19,7 @@ import { log } from './logger'
 import {
   getAutoBackup,
   getClipAutoIndex,
+  getEmbeddingModel,
   getImportOptions,
   getIndexDirFor,
   getLayout,
@@ -30,6 +31,7 @@ import {
   readConfig,
   saveAutoBackup,
   saveClipAutoIndex,
+  saveEmbeddingModel,
   saveImportOptions,
   saveLayout,
   saveSkin,
@@ -42,10 +44,19 @@ import {
   updateConfig
 } from './settings'
 import { startAutoBackup } from './scheduler'
-import { clipStatus, cancelClipIndex, indexEmbeddings, invalidateClipCache, searchByText, searchSimilar } from './embeddings'
+import {
+  clipStatus,
+  cancelClipIndex,
+  indexEmbeddings,
+  invalidateClipCache,
+  listEmbeddingModels,
+  searchByText,
+  searchSimilar
+} from './embeddings'
 import { autoTagStatus, clearAutoTags, getAutoTagSettings, listAutoTagCategories, runAutoTag, saveAutoTagSettings } from './autoTag'
 import { downloadModel } from './clip/download'
 import { resetModel } from './clip/embedder'
+import { isEmbeddingModelId } from './clip/models'
 import { startAutoClipIndex, stopAutoClipIndex } from './clip/autoIndex'
 import { applyRelocate, buildRelocatePlan, getLastRelocateDir, rememberRelocateDir } from './relocate'
 import { deleteGear, deleteKit, gearCatalog, gearScenarios, gearSuggestions, gearUsage, listGear, listKits, recommendGear, saveGear, saveKit } from './gear'
@@ -106,6 +117,7 @@ import type {
   AppDialogOptions,
   AppDialogResult,
   AutoTagSettings,
+  EmbeddingModelId,
   FilterState,
   GearSpec,
   ImportOptions,
@@ -627,6 +639,19 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('clip:status', () => clipStatus())
+  ipcMain.handle('clip:models', () => listEmbeddingModels())
+  ipcMain.handle('clip:selectModel', (_e, id: EmbeddingModelId) => {
+    if (!isEmbeddingModelId(id)) throw new Error('未知的语义模型')
+    // 正在跑旧模型的索引就先停下，避免切完还在往旧 tag 里写
+    cancelClipIndex()
+    saveEmbeddingModel(id)
+    // 换模型后必须丢掉旧 session 和向量缓存，否则会拿错维度的向量去比对
+    resetModel()
+    invalidateClipCache()
+    const status = clipStatus()
+    activeWindow()?.webContents.send('clip:auto-status', status)
+    return status
+  })
   ipcMain.handle('clip:autoIndex:get', () => getClipAutoIndex())
 
   ipcMain.handle('clip:autoIndex:save', (_e, enabled: boolean) => saveClipAutoIndex(enabled))
@@ -655,12 +680,13 @@ export function registerIpc(): void {
     searchSimilar(itemId, limit ?? 200)
   )
 
-  ipcMain.handle('clip:download', async () => {
+  ipcMain.handle('clip:download', async (_e, modelId?: EmbeddingModelId) => {
     const win = activeWindow()
-    const dir = await downloadModel((progress) => {
+    const id = isEmbeddingModelId(modelId) ? modelId : getEmbeddingModel()
+    const dir = await downloadModel(id, (progress) => {
       win?.webContents.send('clip:download-progress', progress)
     })
-    resetModel()
+    resetModel(id)
     return dir
   })
 

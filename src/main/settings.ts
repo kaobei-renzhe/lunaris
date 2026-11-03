@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
-import type { AutoTagSettings, ImportOptions, ThemeMode } from '../shared/types'
+import type { AutoTagSettings, EmbeddingModelId, ImportOptions, ThemeMode } from '../shared/types'
 import type { LayoutSizes } from '../shared/layout'
 import { normalizeLayout } from '../shared/layout'
 import type { ThumbQualityPref } from '../shared/thumbs'
@@ -22,9 +22,14 @@ export interface AppConfig {
   /** 图库路径 → 索引目录（library.db / thumbnails / previews）；没有记录就放在图库目录里 */
   libraryIndex?: Record<string, string>
   autoBackup?: Partial<AutoBackupSettings>
-  autoTag?: Partial<AutoTagSettings>
+  autoTag?: Partial<AutoTagSettings> & {
+    /** 每个模型各自记一份阈值；老配置只有 threshold，按 Chinese-CLIP 处理 */
+    thresholds?: Partial<Record<EmbeddingModelId, number>>
+  }
   importOptions?: Partial<ImportOptions>
   clipAutoIndex?: boolean
+  /** 当前使用的内嵌语义模型；不填按 Chinese-CLIP 处理，老配置零迁移 */
+  embeddingModel?: EmbeddingModelId
   skin?: SkinId
   relocate?: { lastDir?: string }
   theme?: ThemeMode
@@ -141,6 +146,16 @@ export function getClipAutoIndex(): boolean {
 export function saveClipAutoIndex(enabled: boolean): boolean {
   const next = Boolean(enabled)
   updateConfig({ clipAutoIndex: next })
+  return next
+}
+
+export function getEmbeddingModel(): EmbeddingModelId {
+  return readConfig().embeddingModel === 'siglip2' ? 'siglip2' : 'chinese-clip'
+}
+
+export function saveEmbeddingModel(id: EmbeddingModelId): EmbeddingModelId {
+  const next: EmbeddingModelId = id === 'siglip2' ? 'siglip2' : 'chinese-clip'
+  updateConfig({ embeddingModel: next })
   return next
 }
 

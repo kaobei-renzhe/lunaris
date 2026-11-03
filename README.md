@@ -19,7 +19,7 @@
 
 ## 这是什么
 
-月相是一个类似 Eagle 的本地图片管理工具：图片始终留在你自己的磁盘上，应用只维护一份索引数据库和缩略图缓存。除了常规的标签、文件夹、筛选、查重，还针对摄影工作流做了 RAW 内嵌预览、RAW + JPEG 配对、连拍堆叠、P/X/U 旗标，以及基于本地 Chinese-CLIP 模型的中文语义搜图和自动分类。支持多图库切换与 6 套界面皮肤。
+月相是一个类似 Eagle 的本地图片管理工具：图片始终留在你自己的磁盘上，应用只维护一份索引数据库和缩略图缓存。除了常规的标签、文件夹、筛选、查重，还针对摄影工作流做了 RAW 内嵌预览、RAW + JPEG 配对、连拍堆叠、P/X/U 旗标，以及基于本地 Chinese-CLIP / SigLIP 2 模型的中文语义搜图和自动分类。支持多图库切换与 6 套界面皮肤。
 
 ## 功能
 
@@ -35,7 +35,7 @@
 **整理**
 
 - 标签、文件夹、智能文件夹（把当前筛选条件存下来）
-- 标签支持多级树：把标签拖到另一个标签上即可归为子级，拖回「标签」标题移回顶层；选中父标签等于选中整棵子树；人像维度取值默认收起，不挤占普通标签
+- 统一的多级筛选树：普通标签与人像维度都是树节点，维度展开后是取值；把标签拖到另一个标签上即可归为子级，拖回「标签」标题移回顶层；选中父节点等于选中整棵子树
 - 星级评分与 P / X / U 旗标
 - RAW + JPEG 自动配对、连拍自动堆叠，也可以手动堆叠与单组展开
 - 自动标签：用同一套零样本类目给图片打普通标签（阈值可调 0.15–0.35），打完即可筛选，也能一键清除
@@ -59,7 +59,7 @@
 
 **人像工作台**
 
-- 独立三栏视图：左侧维度筛选、中间瀑布流、右侧逐张或批量打标
+- 独立三栏视图：左侧文件夹与维度筛选（两者叠加）、中间瀑布流、右侧逐张或批量打标
 - 内置 9 个维度：景别、视角、光线、天气、场景、色调、氛围、情绪、时段；同维度内 OR，跨维度 AND
 - 维度与取值都能自定义增删，本质是带归属的普通标签，标签筛选与智能文件夹照常可用
 - 删维度只解除归属关系，照片上的标记和标签本身都会保留
@@ -86,7 +86,7 @@
 | 界面 | React 19、TypeScript 7、Tailwind CSS v4、lucide-react |
 | 数据 | better-sqlite3（WAL、FTS5 trigram、在线快照备份） |
 | 图像 | sharp（缩略图 / RAW 预览 / TIFF 转码）、exifr（EXIF） |
-| 语义 | onnxruntime-node + Chinese-CLIP ViT-B/16（int8 ONNX） |
+| 语义 | onnxruntime-node + Chinese-CLIP ViT-B/16 / SigLIP 2 Base（int8 ONNX，可在设置里切换） |
 | 大模型 | OpenAI 兼容接口 / Anthropic（可自定义 baseUrl），Key 走系统加密 |
 | 测试 | Vitest 5（导入规则、分组、皮肤、清晰度档位、格式化） |
 | 打包 | electron-builder（NSIS） |
@@ -114,7 +114,7 @@ npm run dist       # 构建并打包 Windows 安装包到 release/
 
 ## 语义搜图说明
 
-语义功能依赖本地模型，模型文件约 **190MB**，没有随仓库分发，需要在侧栏「语义索引」里首次点击时自动下载（来源：HuggingFace 镜像上的 `Xenova/chinese-clip-vit-base-patch16`，支持断点续传与大小校验）。下载完成后完全离线运行，图片不会离开本机。索引时只读 720px 缩略图、限制 libvips 线程数，并会按批让出 CPU；几万张的图库建议挂着「闲时自动索引」慢慢跑。
+语义功能依赖本地模型，没有随仓库分发，需要在侧栏「语义索引」里首次点击时自动下载（支持断点续传与大小校验）。内置两套可选模型：**Chinese-CLIP**（约 190MB，中文原生、体积小）与 **SigLIP 2 Base**（约 393MB，多语言，通用零样本基准更强）。两套索引可以同时留在库里，切换模型后新模型需要重建一次索引；旧索引不会删除。本地 60 张样张 A/B 显示 SigLIP 2 的中文类目弱于 Chinese-CLIP（抽样一致率仅 10%，明显的人像会被判成室内/食物），所以默认仍用 Chinese-CLIP，SigLIP 2 作为对比模型保留。下载完成后完全离线运行，图片不会离开本机。索引时只读 720px 缩略图、限制 libvips 线程数，并会按批让出 CPU；几万张的图库建议挂着「闲时自动索引」慢慢跑。
 
 ## AI 功能（可选，默认关闭）
 
@@ -186,5 +186,7 @@ docs/            设计与实施文档
 ## 致谢
 
 - [Chinese-CLIP](https://github.com/OFA-Sys/Chinese-CLIP) 提供中文图文模型
+- [SigLIP 2](https://huggingface.co/google/siglip2-base-patch16-224) 提供多语言零样本图文模型
 - [Xenova/chinese-clip-vit-base-patch16](https://huggingface.co/Xenova/chinese-clip-vit-base-patch16) 提供 ONNX 转换版本
+- [onnx-community/siglip2-base-patch16-224-ONNX](https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX) 提供 SigLIP 2 的 ONNX 转换版本
 - [Electron](https://www.electronjs.org/)、[React](https://react.dev/)、[better-sqlite3](https://github.com/WiseLibs/better-sqlite3)、[sharp](https://sharp.pixelplumbing.com/)
