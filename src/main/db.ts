@@ -132,6 +132,8 @@ function migrate(db: Database.Database): void {
   ensureColumn(db, 'items', 'error', 'error TEXT')
   // 文件本身的修改时间（mtime 列存的是拍摄时间），用于「刷新图库」识别被覆盖修改的照片
   ensureColumn(db, 'items', 'file_mtime', 'file_mtime INTEGER NOT NULL DEFAULT 0')
+  // 人像维度的标签归属；NULL 表示普通标签，老数据零迁移
+  ensureColumn(db, 'tags', 'facet_id', 'facet_id TEXT')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS stacks (
@@ -170,9 +172,64 @@ function migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_items_stack ON items(stack_id);
     CREATE INDEX IF NOT EXISTS idx_items_dir ON items(dir);
     CREATE INDEX IF NOT EXISTS idx_items_size ON items(size);
+
+    -- 人像工作台的维度定义：加维度不用改代码
+    CREATE TABLE IF NOT EXISTS facets (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL UNIQUE,
+      multi       INTEGER NOT NULL DEFAULT 1,
+      auto_source TEXT,
+      sort        INTEGER NOT NULL DEFAULT 0,
+      builtin     INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_tags_facet ON tags(facet_id);
   `)
 
+  seedFacets(db)
   backfillDirs(db)
+}
+
+/** 内置维度与取值：只在 facets 表为空时种一次，之后用户改名/删维度都不会被覆盖 */
+const FACET_SEEDS: Array<{
+  id: string
+  name: string
+  multi: boolean
+  autoSource: string | null
+  values: string[]
+}> = [
+  { id: 'shot_size', name: '景别', multi: false, autoSource: 'local', values: ['特写', '近景', '中景', '全景', '远景', '环境人像'] },
+  { id: 'angle', name: '视角', multi: false, autoSource: 'local', values: ['平视', '俯拍', '仰拍', '过肩', '侧脸'] },
+  { id: 'light', name: '光线', multi: true, autoSource: 'clip', values: ['顺光', '侧光', '侧逆光', '逆光', '窗口光', '硬光', '柔光'] },
+  { id: 'weather', name: '天气', multi: false, autoSource: 'clip', values: ['晴', '多云', '阴', '雨', '雪', '雾'] },
+  { id: 'scene', name: '场景', multi: true, autoSource: 'clip', values: ['影棚', '居家', '街头', '自然', '海边', '建筑', '咖啡馆', '废墟'] },
+  { id: 'tone', name: '色调', multi: true, autoSource: 'local', values: ['冷调', '暖调', '中性', '高调', '低调', '黑白', '胶片'] },
+  { id: 'mood', name: '氛围', multi: true, autoSource: 'clip', values: ['温柔', '冷峻', '复古', '清新', '忧郁', '张力', '慵懒'] },
+  { id: 'emotion', name: '情绪', multi: true, autoSource: 'llm', values: ['笑', '沉思', '疏离', '俏皮', '严肃', '紧张', '害羞'] },
+  { id: 'time_of_day', name: '时段', multi: false, autoSource: 'local', values: ['清晨', '上午', '正午', '傍晚', '蓝调', '夜'] }
+]
+
+const FACET_COLORS = ['#7aa2f7', '#a78bfa', '#f2c94c', '#e86a92', '#6fcf97', '#56ccf2', '#bb86fc', '#f2994a']
+
+function seedFacets(db: Database.Database): void {
+  const existing = db.prepare('SELECT COUNT(*) AS c FROM facets').get() as { c: number }
+  if (existing.c > 0) return
+  const insertFacet = db.prepare(
+    'INSERT INTO facets(id, name, multi, auto_source, sort, builtin) VALUES(?, ?, ?, ?, ?, 1)'
+  )
+  const insertTag = db.prepare(
+    'INSERT OR IGNORE INTO tags(name, color, created_at) VALUES(?, ?, ?)'
+  )
+  const attachTag = db.prepare('UPDATE tags SET facet_id = ? WHERE name = ? AND facet_id IS NULL')
+  const tx = db.transaction(() => {
+    FACET_SEEDS.forEach((facet, index) => {
+      insertFacet.run(facet.id, facet.name, facet.multi ? 1 : 0, facet.autoSource, index)
+      facet.values.forEach((value, i) => {
+        insertTag.run(value, FACET_COLORS[i % FACET_COLORS.length], Date.now())
+        attachTag.run(facet.id, value)
+      })
+    })
+  })
+  tx()
 }
 
 /**

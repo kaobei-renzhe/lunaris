@@ -35,6 +35,8 @@ import {
   saveSkin,
   saveTheme,
   saveThumbCacheLimitMB,
+  saveAiScoreMinRating,
+  getAiScoreMinRating,
   saveThumbQuality,
   setIndexDirFor,
   updateConfig
@@ -85,10 +87,20 @@ import {
   thumbPathFor,
   trashItems,
   trashMissing,
+  scoreCandidateCounts,
   unstack,
   updateItem
 } from './repo'
 import type { AutoBackupSettings } from './settings'
+import {
+  bulkSetFacetValue,
+  createFacet,
+  createFacetValue,
+  deleteFacet,
+  listFacets,
+  renameFacet,
+  setItemFacet
+} from './facets'
 import type {
   AppDialogOptions,
   AppDialogResult,
@@ -306,6 +318,23 @@ export function registerIpc(): void {
   ipcMain.handle('tags:delete', (_e, id: number) => deleteTag(id))
   ipcMain.handle('tags:set', (_e, itemIds: number[], tagId: number, add: boolean) =>
     setTag(itemIds, tagId, add)
+  )
+
+  // 人像工作台：维度、取值与照片上的标记
+  ipcMain.handle('facets:list', () => listFacets())
+  ipcMain.handle('facets:create', (_e, name: string) => createFacet(name))
+  ipcMain.handle('facets:rename', (_e, id: string, name: string) => renameFacet(id, name))
+  ipcMain.handle('facets:delete', (_e, id: string) => deleteFacet(id))
+  ipcMain.handle('facets:createValue', (_e, facetId: string, name: string) =>
+    createFacetValue(facetId, name)
+  )
+  ipcMain.handle('facets:setItem', (_e, itemId: number, facetId: string, tagIds: number[]) =>
+    setItemFacet(itemId, facetId, tagIds)
+  )
+  ipcMain.handle(
+    'facets:bulkSet',
+    (_e, itemIds: number[], facetId: string, tagId: number, add: boolean) =>
+      bulkSetFacetValue(itemIds, facetId, tagId, add)
   )
 
   ipcMain.handle('folders:list', () => listFolders())
@@ -683,6 +712,11 @@ export function registerIpc(): void {
   ipcMain.handle('llm:quality', (_e, itemIds: number[]) =>
     envelope(() => scorePhotos(Array.isArray(itemIds) ? itemIds : []))
   )
+
+  // AI 评分的星级门槛：设置页读写 + 当前范围内的照片数
+  ipcMain.handle('llm:scoreMinRating:get', () => getAiScoreMinRating())
+  ipcMain.handle('llm:scoreMinRating:save', (_e, value: number) => saveAiScoreMinRating(value))
+  ipcMain.handle('llm:scoreCandidates', () => scoreCandidateCounts(getAiScoreMinRating()))
 
   ipcMain.on('ui:dialog-reply', (_e, id: number, result: AppDialogResult) => {
     const resolve = pendingDialogs.get(id)

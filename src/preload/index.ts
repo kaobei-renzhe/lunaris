@@ -36,6 +36,16 @@ const api: Api = {
   stats: () => ipcRenderer.invoke('stats:get'),
 
   listTags: () => ipcRenderer.invoke('tags:list'),
+  listFacets: () => ipcRenderer.invoke('facets:list'),
+  createFacet: (name: string) => ipcRenderer.invoke('facets:create', name),
+  renameFacet: (id: string, name: string) => ipcRenderer.invoke('facets:rename', id, name),
+  deleteFacet: (id: string) => ipcRenderer.invoke('facets:delete', id),
+  createFacetValue: (facetId: string, name: string) =>
+    ipcRenderer.invoke('facets:createValue', facetId, name),
+  setItemFacet: (itemId: number, facetId: string, tagIds: number[]) =>
+    ipcRenderer.invoke('facets:setItem', itemId, facetId, tagIds),
+  bulkSetFacetValue: (itemIds: number[], facetId: string, tagId: number, add: boolean) =>
+    ipcRenderer.invoke('facets:bulkSet', itemIds, facetId, tagId, add),
   createTag: (name: string, color?: string) => ipcRenderer.invoke('tags:create', name, color),
   deleteTag: (id: number) => ipcRenderer.invoke('tags:delete', id),
   setTag: (itemIds: number[], tagId: number, add: boolean) =>
@@ -127,6 +137,9 @@ const api: Api = {
   llmTest: () => ipcRenderer.invoke('llm:test'),
   llmRun: (capabilityId, input) => ipcRenderer.invoke('llm:run', capabilityId, input),
   llmScore: (itemIds) => ipcRenderer.invoke('llm:quality', itemIds),
+  getAiScoreMinRating: () => ipcRenderer.invoke('llm:scoreMinRating:get'),
+  saveAiScoreMinRating: (value: number) => ipcRenderer.invoke('llm:scoreMinRating:save', value),
+  aiScoreCandidates: () => ipcRenderer.invoke('llm:scoreCandidates'),
   startDrag: (itemId: number) => ipcRenderer.send('shell:startDrag', itemId),
   confirm: (message: string, detail?: string) => ipcRenderer.invoke('ui:confirm', message, detail),
   replyDialog: (id, result) => ipcRenderer.send('ui:dialog-reply', id, result),

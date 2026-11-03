@@ -23,7 +23,9 @@ import Gallery from './components/Gallery'
 import DetailPanel from './components/DetailPanel'
 import ResizeHandle from './components/ResizeHandle'
 import Lightbox from './components/Lightbox'
+import PortraitWorkspace from './PortraitWorkspace'
 import { findRenderedNeighbor, type Direction } from './lib/spatialNav'
+import { pickScorable } from './lib/scoreQueue'
 import DuplicatesDialog from './components/DuplicatesDialog'
 import AutoBackupDialog from './components/AutoBackupDialog'
 import AutoTagDialog from './components/AutoTagDialog'
@@ -77,6 +79,8 @@ export default function App() {
   const [duplicatesOpen, setDuplicatesOpen] = useState(false)
   const [autoBackupOpen, setAutoBackupOpen] = useState(false)
   const [autoTagOpen, setAutoTagOpen] = useState(false)
+  /** 人像工作台：独立三栏视图，和主图库共用同一份 items */
+  const [portraitOpen, setPortraitOpen] = useState(false)
   const [relocateOpen, setRelocateOpen] = useState(false)
   const [equipmentOpen, setEquipmentOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -534,7 +538,25 @@ export default function App() {
   const scoreItems = useCallback(
     async (ids: number[]) => {
       if (!ids.length || aiScoringRef.current) return
-      const picked = ids.slice(0, 12)
+      // 星级门槛由设置页决定：低于门槛和没标星（0 星）的照片不进评分队列
+      const minRating = await window.api.getAiScoreMinRating().catch(() => 0)
+      const ratings = new Map(itemsRef.current.map((item) => [item.id, item.rating]))
+      const candidates = pickScorable(ids, ratings, minRating)
+      const skipped = ids.length - candidates.length
+      if (!candidates.length) {
+        notify(`AI 评分要求星级 ≥ ${minRating} 星，本次选中的照片都不满足，已全部跳过`)
+        return
+      }
+      const picked = candidates.slice(0, 12)
+      // 批量处理前先把数量交给用户确认；单张点选不再多弹一次
+      if (picked.length > 1) {
+        const detail =
+          `本次将对 ${picked.length} 张照片评分` +
+          (minRating > 0 ? `（仅星级 ≥ ${minRating}，跳过 ${skipped} 张）` : '') +
+          '。评分会调用你配置的模型并消耗 token。'
+        const ok = await window.api.confirm('AI 评分', detail)
+        if (!ok) return
+      }
       aiScoringRef.current = true
       setAiScoring(true)
       try {
@@ -549,7 +571,8 @@ export default function App() {
           : 0
         const extra = [
           failed.length ? `${failed.length} 张失败` : '',
-          ids.length > picked.length ? `只评了前 ${picked.length} 张` : ''
+          skipped ? `跳过 ${skipped} 张（星级不足）` : '',
+          candidates.length > picked.length ? `只评了前 ${picked.length} 张` : ''
         ]
           .filter(Boolean)
           .join('，')
@@ -679,6 +702,8 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // 人像工作台有自己的一套快捷键，主图库不要再抢键
+      if (portraitOpen) return
       const el = document.activeElement as HTMLElement | null
       const typing =
         !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
@@ -779,6 +804,7 @@ export default function App() {
     selectedIds,
     lightboxId,
     activeId,
+    portraitOpen,
     closeLightbox,
     openLightbox,
     deleteSelected,
@@ -1058,6 +1084,10 @@ export default function App() {
     )
   }
 
+  if (portraitOpen) {
+    return <PortraitWorkspace onBack={() => setPortraitOpen(false)} />
+  }
+
   return (
     <div ref={shellRef} className="h-full flex flex-col relative">
       <div className="flex-1 flex min-h-0">
@@ -1076,6 +1106,7 @@ export default function App() {
           }}
           onImportFiles={openImportDialog}
           onImportFolder={openImportDialog}
+          onPortrait={() => setPortraitOpen(true)}
           onSync={() => void syncLibrary()}
           onRescan={rescan}
           onDuplicates={() => setDuplicatesOpen(true)}

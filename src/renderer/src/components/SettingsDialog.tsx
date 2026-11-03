@@ -72,6 +72,9 @@ export default function SettingsDialog({
   const [saving, setSaving] = useState(false)
   const [skinSaving, setSkinSaving] = useState(false)
   const [autoClip, setAutoClip] = useState<boolean | null>(null)
+  const [scoreMinRating, setScoreMinRating] = useState<number | null>(null)
+  const [scoreCounts, setScoreCounts] = useState<{ matched: number; total: number } | null>(null)
+  const [scoreBusy, setScoreBusy] = useState(false)
   const [llm, setLlm] = useState<LlmStatus | null>(null)
   const [llmDraft, setLlmDraft] = useState({ baseUrl: '', model: '' })
   const [keyDraft, setKeyDraft] = useState('')
@@ -93,6 +96,14 @@ export default function SettingsDialog({
       .then(setAutoClip)
       .catch(() => setAutoClip(true))
     void window.api
+      .getAiScoreMinRating()
+      .then(setScoreMinRating)
+      .catch(() => setScoreMinRating(0))
+    void window.api
+      .aiScoreCandidates()
+      .then(setScoreCounts)
+      .catch(() => setScoreCounts(null))
+    void window.api
       .llmStatus()
       .then(setLlm)
       .catch(() => setLlm(null))
@@ -112,6 +123,21 @@ export default function SettingsDialog({
 
   const limitLabel = (mb: number): string =>
     THUMB_CACHE_LIMIT_OPTIONS.find((option) => option.value === mb)?.label ?? `${mb} MB`
+
+  /** 改 AI 评分的星级门槛：存主进程配置，顺手刷新当前范围内可评分的张数 */
+  const changeScoreRating = async (value: number): Promise<void> => {
+    if (scoreBusy) return
+    setScoreBusy(true)
+    try {
+      const saved = await window.api.saveAiScoreMinRating(value)
+      setScoreMinRating(saved)
+      setScoreCounts(await window.api.aiScoreCandidates())
+    } catch {
+      /* 保存失败保持原值，下次打开设置再读 */
+    } finally {
+      setScoreBusy(false)
+    }
+  }
 
   /** 改上限：调小时主进程会立刻按最久未用淘汰一次 */
   const changeLimit = async (mb: number): Promise<void> => {
@@ -725,6 +751,43 @@ export default function SettingsDialog({
                 </div>
                 <div className="text-[11px] leading-4 text-[var(--faint)]">
                   手动点侧栏「语义索引」仍会一次性把剩余照片跑完，中断后可以再点一次继续。
+                </div>
+
+                <div className="mt-2 text-[12.5px]">AI 评分范围</div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5 space-y-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[{ value: 0, label: '全部照片' }]
+                      .concat([1, 2, 3, 4, 5].map((n) => ({ value: n, label: '★'.repeat(n) })))
+                      .map((option) => {
+                        const active = (scoreMinRating ?? 0) === option.value
+                        return (
+                          <button
+                            key={option.value}
+                            className={`h-[26px] px-2 rounded-md border text-[11.5px] transition-colors ${
+                              active
+                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]'
+                                : 'border-[var(--border)] bg-[var(--panel)] text-[var(--faint)]'
+                            }`}
+                            disabled={scoreBusy || scoreMinRating === null}
+                            aria-pressed={active}
+                            onClick={() => void changeScoreRating(option.value)}
+                          >
+                            {option.label}
+                          </button>
+                        )
+                      })}
+                  </div>
+                  <div className="text-[10.5px] leading-4 text-[var(--faint)]">
+                    选定星级后，AI 评分只处理「星级 ≥ 该值」的照片；低于该星级、以及没有标星的照片会被自动跳过。
+                    这项设置只影响 AI 评分队列，不改变相册里的筛选与排序。
+                  </div>
+                  <div className="text-[10.5px] leading-4 text-[var(--faint)]">
+                    当前范围：
+                    {scoreCounts
+                      ? `${scoreCounts.matched} / ${scoreCounts.total} 张可评分`
+                      : '读取中…'}
+                    {scoreMinRating ? `（门槛 ${scoreMinRating} 星）` : '（全部照片）'}
+                  </div>
                 </div>
               </>
             )}

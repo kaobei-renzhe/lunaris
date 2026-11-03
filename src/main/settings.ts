@@ -34,6 +34,8 @@ export interface AppConfig {
   thumbQuality?: ThumbQualityPref
   /** 高清缩略图缓存上限（MB），0 = 不限 */
   thumbCacheLimitMB?: number
+  /** AI 评分的最低星级：0 = 全部；>0 时只评 rating >= N，未标星（0 星）不参与 */
+  aiScoreMinRating?: number
   llm?: Partial<LlmConfig>
 }
 
@@ -188,5 +190,20 @@ export function getThumbCacheLimitMB(): number {
 export function saveThumbCacheLimitMB(mb: number): number {
   const next = Number.isFinite(mb) && mb >= 0 ? Math.round(mb) : THUMB_CACHE_LIMIT_DEFAULT
   updateConfig({ thumbCacheLimitMB: next })
+  return next
+}
+
+/** AI 评分的最低星级：0 = 全部照片，1–5 = 只评该星级及以上的照片 */
+export function getAiScoreMinRating(): number {
+  const stored = readConfig().aiScoreMinRating
+  if (typeof stored !== 'number' || !Number.isFinite(stored)) return 0
+  const value = Math.round(stored)
+  return value >= 1 && value <= 5 ? value : 0
+}
+
+export function saveAiScoreMinRating(value: number): number {
+  const rounded = Number.isFinite(value) ? Math.round(value) : 0
+  const next = rounded >= 1 && rounded <= 5 ? rounded : 0
+  updateConfig({ aiScoreMinRating: next })
   return next
 }

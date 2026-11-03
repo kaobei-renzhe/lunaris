@@ -26,6 +26,24 @@ export interface Tag {
   count: number
 }
 
+/** 人像维度的一个取值，本质是带 facet_id 的普通标签 */
+export interface FacetValue {
+  id: number
+  name: string
+  color: string
+  count: number
+}
+
+/** 人像维度（景别 / 光线 / 氛围……），可自定义增删 */
+export interface Facet {
+  id: string
+  name: string
+  /** 同一维度是否允许多选 */
+  multi: boolean
+  sort: number
+  values: FacetValue[]
+}
+
 export interface Folder {
   id: number
   name: string
@@ -66,6 +84,8 @@ export interface FilterState {
   colorFamily?: ColorFamily | null
   orientation?: Orientation | null
   flag?: number
+  /** 人像维度：facetId → 选中的 tagId 列表（同维度 OR，跨维度 AND） */
+  facets?: Record<string, number[]>
   expandBursts?: boolean
   expandedGroups?: string[]
   missing?: boolean
@@ -403,6 +423,14 @@ export interface Api {
   rescan: () => Promise<{ missing: number; restored: number }>
   stats: () => Promise<Stats>
   listTags: () => Promise<Tag[]>
+  /** 人像工作台：维度与取值 */
+  listFacets: () => Promise<Facet[]>
+  createFacet: (name: string) => Promise<Facet>
+  renameFacet: (id: string, name: string) => Promise<void>
+  deleteFacet: (id: string) => Promise<void>
+  createFacetValue: (facetId: string, name: string) => Promise<FacetValue>
+  setItemFacet: (itemId: number, facetId: string, tagIds: number[]) => Promise<void>
+  bulkSetFacetValue: (itemIds: number[], facetId: string, tagId: number, add: boolean) => Promise<void>
   createTag: (name: string, color?: string) => Promise<Tag>
   deleteTag: (id: number) => Promise<void>
   setTag: (itemIds: number[], tagId: number, add: boolean) => Promise<void>
@@ -493,6 +521,11 @@ export interface Api {
   llmRun: (capabilityId: string, input: unknown) => Promise<LlmRunOutcome>
   /** 评分并落库，返回每张的分数与实际写入条数 */
   llmScore: (itemIds: number[]) => Promise<LlmRunOutcome<PhotoQualitySaved>>
+  /** AI 评分的最低星级：0 = 全部照片 */
+  getAiScoreMinRating: () => Promise<number>
+  saveAiScoreMinRating: (value: number) => Promise<number>
+  /** 当前范围内可评分的照片数（matched 满足星级门槛，total 全部可评分） */
+  aiScoreCandidates: () => Promise<{ matched: number; total: number }>
   startDrag: (itemId: number) => void
   confirm: (message: string, detail?: string) => Promise<boolean>
   replyDialog: (id: number, result: AppDialogResult) => void

@@ -335,6 +335,18 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
     params.push(tagId)
   }
 
+  // 人像维度：同一维度内 OR（IN），维度之间 AND（多个 EXISTS）
+  for (const [facetId, tagIds] of Object.entries(filter.facets ?? {})) {
+    const picked = (tagIds ?? []).filter((id) => Number.isFinite(id))
+    if (!picked.length) continue
+    where.push(
+      `EXISTS (SELECT 1 FROM item_tags itf JOIN tags tf ON tf.id = itf.tag_id
+               WHERE itf.item_id = i.id AND tf.facet_id = ?
+                 AND itf.tag_id IN (${picked.map(() => '?').join(',')}))`
+    )
+    params.push(facetId, ...picked)
+  }
+
   const q = (filter.query ?? '').trim()
   if (q) {
     const like = `%${q.replace(/[%_]/g, (m) => `\\${m}`)}%`
@@ -563,6 +575,22 @@ export function trashMissing(): number[] {
   ).map((row) => row.id)
   if (ids.length) trashItems(ids)
   return ids
+}
+
+/**
+ * AI 评分的候选数量。
+ * total = 可参与评分的照片（未删、未丢、没有导入错误）；matched = 其中满足星级门槛的。
+ * 门槛为 0 时两者相等，未标星的照片也会被算进去。
+ */
+export function scoreCandidateCounts(minRating: number): { matched: number; total: number } {
+  const db = getDb()
+  const base = 'FROM items WHERE trashed = 0 AND missing = 0 AND error IS NULL'
+  const total = (db.prepare(`SELECT COUNT(*) AS c ${base}`).get() as { c: number }).c
+  if (!(minRating > 0)) return { matched: total, total }
+  const matched = (
+    db.prepare(`SELECT COUNT(*) AS c ${base} AND rating >= ?`).get(minRating) as { c: number }
+  ).c
+  return { matched, total }
 }
 
 /**

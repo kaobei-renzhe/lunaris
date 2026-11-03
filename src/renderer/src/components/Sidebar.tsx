@@ -100,6 +100,8 @@ interface SidebarProps {
   onFilter: (filter: FilterState) => void
   onImportFiles: () => void
   onImportFolder: () => void
+  /** 打开人像工作台（独立三栏视图） */
+  onPortrait: () => void
   onSync: () => void
   onRescan: () => void
   onDuplicates: () => void
@@ -133,6 +135,7 @@ export default function Sidebar({
   onFilter,
   onImportFiles,
   onImportFolder,
+  onPortrait,
   onSync,
   onRescan,
   onDuplicates,
@@ -275,6 +278,15 @@ export default function Sidebar({
           <Images size={14} />
           全部图片
           <span className="count">{stats.total}</span>
+        </div>
+
+        <div
+          className="side-item"
+          onClick={onPortrait}
+          title="按景别、光线、氛围等人像维度筛选与打标"
+        >
+          <Camera size={14} />
+          人像工作台
         </div>
 
         {stats.missing > 0 && (
