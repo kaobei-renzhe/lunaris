@@ -1143,6 +1143,14 @@ export default function App() {
               bump()
             }
           }}
+          onTagNest={async (childId, parentId) => {
+            try {
+              await window.api.setTagParent(childId, parentId)
+              bump()
+            } catch (error) {
+              notify(String((error as Error).message).replace(/^Error invoking remote method '[^']+': /, ''))
+            }
+          }}
           onDeleteSmart={async (id) => {
             await window.api.deleteSmart(id)
             bump()

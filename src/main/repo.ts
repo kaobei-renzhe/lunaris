@@ -331,8 +331,13 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
   }
 
   for (const tagId of filter.tagIds ?? []) {
-    where.push('EXISTS (SELECT 1 FROM item_tags it WHERE it.item_id = i.id AND it.tag_id = ?)')
-    params.push(tagId)
+    // 多级标签：选中父标签等于选中整棵子树，多个选中项之间仍是 AND
+    const subtree = tagSubtreeIds(tagId)
+    where.push(
+      `EXISTS (SELECT 1 FROM item_tags it WHERE it.item_id = i.id
+               AND it.tag_id IN (${subtree.map(() => '?').join(',')}))`
+    )
+    params.push(...subtree)
   }
 
   // 人像维度：同一维度内 OR（IN），维度之间 AND（多个 EXISTS）
@@ -933,7 +938,7 @@ function commonAncestor(dirs: string[]): string {
 export function listTags(): Tag[] {
   return getDb()
     .prepare(
-      `SELECT t.id, t.name, t.color,
+      `SELECT t.id, t.name, t.color, t.parent_id AS parentId, t.facet_id AS facetId,
               coalesce(SUM(CASE WHEN i.id IS NULL THEN 0 ELSE 1 END), 0) AS count
        FROM tags t
        LEFT JOIN item_tags it ON it.tag_id = t.id
@@ -943,22 +948,62 @@ export function listTags(): Tag[] {
     .all() as Tag[]
 }
 
-export function createTag(name: string, color = '#7aa2f7'): Tag {
+/** 某个标签的整棵子树（含自身），用于筛选与防环校验 */
+export function tagSubtreeIds(tagId: number): number[] {
+  const rows = getDb()
+    .prepare(
+      `WITH RECURSIVE sub(id) AS (
+         SELECT ?
+         UNION ALL
+         SELECT t.id FROM tags t JOIN sub ON t.parent_id = sub.id
+       ) SELECT id FROM sub`
+    )
+    .all(tagId) as Array<{ id: number }>
+  return rows.map((row) => row.id)
+}
+
+export function createTag(name: string, color = '#7aa2f7', parentId: number | null = null): Tag {
   const db = getDb()
   const clean = name.trim()
-  const existing = db.prepare('SELECT id, name, color FROM tags WHERE name = ?').get(clean) as
-    | { id: number; name: string; color: string }
-    | undefined
+  const existing = db
+    .prepare('SELECT id, name, color, parent_id AS parentId, facet_id AS facetId FROM tags WHERE name = ?')
+    .get(clean) as { id: number; name: string; color: string; parentId: number | null; facetId: string | null } | undefined
   if (existing) return { ...existing, count: 0 }
+  const parent =
+    parentId === null ? null : (db.prepare('SELECT id FROM tags WHERE id = ?').get(parentId) ? parentId : null)
   const info = db
-    .prepare('INSERT INTO tags(name, color, created_at) VALUES(?, ?, ?)')
-    .run(clean, color, Date.now())
-  return { id: Number(info.lastInsertRowid), name: clean, color, count: 0 }
+    .prepare('INSERT INTO tags(name, color, created_at, parent_id) VALUES(?, ?, ?, ?)')
+    .run(clean, color, Date.now(), parent)
+  return { id: Number(info.lastInsertRowid), name: clean, color, count: 0, parentId: parent }
+}
+
+/** 调整标签层级；禁止挂到自己或自己的后代下面 */
+export function setTagParent(id: number, parentId: number | null): void {
+  const db = getDb()
+  let cursor = parentId
+  const seen = new Set<number>()
+  while (cursor !== null) {
+    if (cursor === id) throw new Error('不能挂到自己或自己的子标签下面')
+    if (seen.has(cursor)) throw new Error('标签层级存在循环，请先整理好再改')
+    seen.add(cursor)
+    const row = db.prepare('SELECT parent_id AS parentId FROM tags WHERE id = ?').get(cursor) as
+      | { parentId: number | null }
+      | undefined
+    if (!row) throw new Error('目标标签不存在')
+    cursor = row.parentId ?? null
+  }
+  db.prepare('UPDATE tags SET parent_id = ? WHERE id = ?').run(parentId, id)
 }
 
 export function deleteTag(id: number): void {
   const db = getDb()
+  const row = db.prepare('SELECT parent_id AS parentId FROM tags WHERE id = ?').get(id) as
+    | { parentId: number | null }
+    | undefined
+  const parent = row?.parentId ?? null
   const tx = db.transaction(() => {
+    // 子标签上提一层，不跟着一起消失
+    db.prepare('UPDATE tags SET parent_id = ? WHERE parent_id = ?').run(parent, id)
     db.prepare('DELETE FROM item_tags WHERE tag_id = ?').run(id)
     db.prepare('DELETE FROM tags WHERE id = ?').run(id)
   })

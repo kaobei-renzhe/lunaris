@@ -83,6 +83,7 @@ import {
   restoreItems,
   saveSmart,
   setTag,
+  setTagParent,
   stats,
   thumbPathFor,
   trashItems,
@@ -314,8 +315,13 @@ export function registerIpc(): void {
   ipcMain.handle('stats:get', () => stats())
 
   ipcMain.handle('tags:list', () => listTags())
-  ipcMain.handle('tags:create', (_e, name: string, color?: string) => createTag(name, color))
+  ipcMain.handle('tags:create', (_e, name: string, color?: string, parentId?: number | null) =>
+    createTag(name, color, parentId ?? null)
+  )
   ipcMain.handle('tags:delete', (_e, id: number) => deleteTag(id))
+  ipcMain.handle('tags:setParent', (_e, id: number, parentId: number | null) =>
+    setTagParent(id, parentId)
+  )
   ipcMain.handle('tags:set', (_e, itemIds: number[], tagId: number, add: boolean) =>
     setTag(itemIds, tagId, add)
   )

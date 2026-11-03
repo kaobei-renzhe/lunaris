@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DragEvent as ReactDragEvent } from 'react'
+import type { DragEvent as ReactDragEvent, ReactNode } from 'react'
 import {
   Archive,
   ArrowLeftRight,
@@ -121,6 +121,8 @@ interface SidebarProps {
   onDropItems: (ids: number[], target: { folderId?: number; tagId?: number }) => void
   onDeleteFolder: (id: number) => void
   onDeleteTag: (id: number) => void
+  /** 调整标签层级：parentId 为 null 时移回顶层 */
+  onTagNest: (childId: number, parentId: number | null) => Promise<void>
   onDeleteSmart: (id: number) => void
 }
 
@@ -155,11 +157,16 @@ export default function Sidebar({
   onDropItems,
   onDeleteFolder,
   onDeleteTag,
+  onTagNest,
   onDeleteSmart
 }: SidebarProps) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [dropTarget, setDropTarget] = useState<string | null>(null)
+  /** 标签树里被折叠的父标签 */
+  const [collapsedTags, setCollapsedTags] = useState<number[]>([])
+  /** 人像维度的取值默认不在标签树里出现，避免几十个维度值淹掉普通标签 */
+  const [showFacetTags, setShowFacetTags] = useState(false)
   const [expandedDirs, setExpandedDirs] = useState<string[]>([])
   const [dirsOpen, setDirsOpen] = useState(true)
   /** 三个筛选区各自折叠，避免侧栏被长列表占满 */
@@ -248,6 +255,115 @@ export default function Sidebar({
 
   const unselectTag = (id: number): void => {
     onFilter({ ...filter, tagIds: tagIds.filter((t) => t !== id) })
+  }
+
+  /** 多级标签树：维度取值默认不展开，避免几十个维度值把普通标签淹掉 */
+  const facetTagCount = tags.filter((tag) => tag.facetId).length
+  const visibleTags = showFacetTags ? tags : tags.filter((tag) => !tag.facetId)
+  const visibleTagIds = new Set(visibleTags.map((tag) => tag.id))
+  const childrenOf = new Map<number, Tag[]>()
+  for (const tag of visibleTags) {
+    const parent = tag.parentId != null && visibleTagIds.has(tag.parentId) ? tag.parentId : 0
+    const list = childrenOf.get(parent) ?? []
+    list.push(tag)
+    childrenOf.set(parent, list)
+  }
+
+  const isTagDrag = (event: ReactDragEvent): boolean =>
+    event.dataTransfer.types.includes('application/x-imagenest-tag')
+
+  const dragOverTag = (key: string) => (event: ReactDragEvent) => {
+    if (!isTagDrag(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    if (dropTarget !== key) setDropTarget(key)
+  }
+
+  /** 把拖起的标签挂到 parentId 下；null 表示移回顶层 */
+  const dropTagOn = (parentId: number | null) => (event: ReactDragEvent) => {
+    if (!isTagDrag(event)) return
+    event.preventDefault()
+    event.stopPropagation()
+    setDropTarget(null)
+    const childId = Number(event.dataTransfer.getData('application/x-imagenest-tag'))
+    if (Number.isFinite(childId) && childId && childId !== parentId) {
+      void onTagNest(childId, parentId)
+    }
+  }
+
+  const renderTagTree = (tag: Tag, depth: number): ReactNode => {
+    const children = childrenOf.get(tag.id) ?? []
+    const collapsed = collapsedTags.includes(tag.id)
+    const active = tagIds.includes(tag.id)
+    const key = `tag-${tag.id}`
+    return (
+      <div key={tag.id}>
+        <div
+          className={`side-item group ${active ? 'active' : ''} ${
+            dropTarget === key ? 'ring-1 ring-[var(--accent)] bg-[var(--panel-3)]' : ''
+          }`}
+          style={{ paddingLeft: 6 + depth * 12 }}
+          onClick={() => toggleTag(tag.id)}
+          title={`${tag.name}（右键删除；拖到另一个标签上可归为子级）`}
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.setData('application/x-imagenest-tag', String(tag.id))
+            event.dataTransfer.effectAllowed = 'move'
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            setMenu({
+              x: event.clientX,
+              y: event.clientY,
+              kind: '标签',
+              onDelete: () => onDeleteTag(tag.id)
+            })
+          }}
+          onDragOver={(event) => {
+            if (isTagDrag(event)) dragOverTag(key)(event)
+            else dragOver(key)(event)
+          }}
+          onDragLeave={dragLeave(key)}
+          onDrop={(event) => {
+            if (isTagDrag(event)) dropTagOn(tag.id)(event)
+            else drop({ tagId: tag.id })(event)
+          }}
+        >
+          {children.length > 0 ? (
+            <button
+              className="w-3 h-3 grid place-items-center text-[var(--faint)] shrink-0"
+              onClick={(event) => {
+                event.stopPropagation()
+                setCollapsedTags((prev) =>
+                  prev.includes(tag.id) ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
+                )
+              }}
+              title={collapsed ? '展开子标签' : '折叠子标签'}
+            >
+              {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+            </button>
+          ) : (
+            <span className="w-3 shrink-0" />
+          )}
+          <span className="tag-dot" style={{ background: tag.color }} />
+          <span className="truncate">{tag.name}</span>
+          <span className={`count ${active ? 'group-hover:hidden' : ''}`}>{tag.count}</span>
+          {active && (
+            <button
+              className="hidden group-hover:block ml-auto text-[var(--faint)] hover:text-[var(--accent-2)]"
+              title="取消选中（不删除标签）"
+              onClick={(event) => {
+                event.stopPropagation()
+                unselectTag(tag.id)
+              }}
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+        {!collapsed && children.map((child) => renderTagTree(child, depth + 1))}
+      </div>
+    )
   }
 
   return (
@@ -425,56 +541,37 @@ export default function Sidebar({
         )}
 
         <div
-          className="section-title mt-3 cursor-pointer select-none hover:text-[var(--muted)]"
+          className={`section-title mt-3 cursor-pointer select-none hover:text-[var(--muted)] ${
+            dropTarget === 'tag-root' ? 'ring-1 ring-[var(--accent)]' : ''
+          }`}
           onClick={() => toggleSection('tags')}
-          title={openSections.tags ? '折叠标签' : '展开标签'}
+          title={
+            openSections.tags
+              ? '折叠标签；把标签拖到这里可移回顶层'
+              : '展开标签；把标签拖到这里可移回顶层'
+          }
+          onDragOver={dragOverTag('tag-root')}
+          onDragLeave={dragLeave('tag-root')}
+          onDrop={dropTagOn(null)}
         >
           {openSections.tags ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
           <span className="ml-1">标签</span>
-          <span className="ml-auto text-[10px]">{tags.length}</span>
-        </div>
-        {openSections.tags &&
-          tags.map((tag) => (
-            <div
-              key={tag.id}
-              className={`side-item group ${tagIds.includes(tag.id) ? 'active' : ''} ${
-                dropTarget === `tag-${tag.id}` ? 'ring-1 ring-[var(--accent)] bg-[var(--panel-3)]' : ''
-              }`}
-              onClick={() => toggleTag(tag.id)}
-              title={`${tag.name}（右键可删除）`}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                setMenu({
-                  x: event.clientX,
-                  y: event.clientY,
-                  kind: '标签',
-                  onDelete: () => onDeleteTag(tag.id)
-                })
+          {facetTagCount > 0 && (
+            <button
+              className="ml-1.5 px-1 h-[16px] rounded border border-[var(--border)] text-[9.5px] text-[var(--faint)] hover:text-[var(--text)]"
+              title="人像维度的取值默认不混进标签树，需要时再显示"
+              onClick={(event) => {
+                event.stopPropagation()
+                setShowFacetTags((prev) => !prev)
               }}
-              onDragOver={dragOver(`tag-${tag.id}`)}
-              onDragLeave={dragLeave(`tag-${tag.id}`)}
-              onDrop={drop({ tagId: tag.id })}
             >
-              <span className="tag-dot" style={{ background: tag.color }} />
-              <span className="truncate">{tag.name}</span>
-              <span className={`count ${tagIds.includes(tag.id) ? 'group-hover:hidden' : ''}`}>
-                {tag.count}
-              </span>
-              {tagIds.includes(tag.id) && (
-                <button
-                  className="hidden group-hover:block ml-auto text-[var(--faint)] hover:text-[var(--accent-2)]"
-                  title="取消选中（不删除标签）"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    unselectTag(tag.id)
-                  }}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-          ))}
-        {openSections.tags && tags.length === 0 && (
+              {showFacetTags ? '隐藏维度' : `维度 ${facetTagCount}`}
+            </button>
+          )}
+          <span className="ml-auto text-[10px]">{visibleTags.length}</span>
+        </div>
+        {openSections.tags && (childrenOf.get(0) ?? []).map((tag) => renderTagTree(tag, 0))}
+        {openSections.tags && visibleTags.length === 0 && (
           <div className="px-2 py-1 text-[11px] text-[var(--faint)]">在右侧详情里给图片打标签</div>
         )}
 

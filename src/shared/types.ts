@@ -24,6 +24,10 @@ export interface Tag {
   name: string
   color: string
   count: number
+  /** 多级标签树：NULL 表示顶层 */
+  parentId?: number | null
+  /** 属于某个人像维度时记录维度 id（普通标签为 null） */
+  facetId?: string | null
 }
 
 /** 人像维度的一个取值，本质是带 facet_id 的普通标签 */
@@ -431,8 +435,10 @@ export interface Api {
   createFacetValue: (facetId: string, name: string) => Promise<FacetValue>
   setItemFacet: (itemId: number, facetId: string, tagIds: number[]) => Promise<void>
   bulkSetFacetValue: (itemIds: number[], facetId: string, tagId: number, add: boolean) => Promise<void>
-  createTag: (name: string, color?: string) => Promise<Tag>
+  createTag: (name: string, color?: string, parentId?: number | null) => Promise<Tag>
   deleteTag: (id: number) => Promise<void>
+  /** 调整标签层级：parentId 为 null 时移回顶层 */
+  setTagParent: (id: number, parentId: number | null) => Promise<void>
   setTag: (itemIds: number[], tagId: number, add: boolean) => Promise<void>
   listFolders: () => Promise<Folder[]>
   createFolder: (name: string) => Promise<Folder>

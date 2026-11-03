@@ -134,6 +134,8 @@ function migrate(db: Database.Database): void {
   ensureColumn(db, 'items', 'file_mtime', 'file_mtime INTEGER NOT NULL DEFAULT 0')
   // 人像维度的标签归属；NULL 表示普通标签，老数据零迁移
   ensureColumn(db, 'tags', 'facet_id', 'facet_id TEXT')
+  // 标签的多级树：NULL 表示顶层标签
+  ensureColumn(db, 'tags', 'parent_id', 'parent_id INTEGER')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS stacks (
@@ -183,6 +185,7 @@ function migrate(db: Database.Database): void {
       builtin     INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_tags_facet ON tags(facet_id);
+    CREATE INDEX IF NOT EXISTS idx_tags_parent ON tags(parent_id);
   `)
 
   seedFacets(db)

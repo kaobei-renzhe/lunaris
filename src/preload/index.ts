@@ -46,8 +46,11 @@ const api: Api = {
     ipcRenderer.invoke('facets:setItem', itemId, facetId, tagIds),
   bulkSetFacetValue: (itemIds: number[], facetId: string, tagId: number, add: boolean) =>
     ipcRenderer.invoke('facets:bulkSet', itemIds, facetId, tagId, add),
-  createTag: (name: string, color?: string) => ipcRenderer.invoke('tags:create', name, color),
+  createTag: (name: string, color?: string, parentId?: number | null) =>
+    ipcRenderer.invoke('tags:create', name, color, parentId ?? null),
   deleteTag: (id: number) => ipcRenderer.invoke('tags:delete', id),
+  setTagParent: (id: number, parentId: number | null) =>
+    ipcRenderer.invoke('tags:setParent', id, parentId),
   setTag: (itemIds: number[], tagId: number, add: boolean) =>
     ipcRenderer.invoke('tags:set', itemIds, tagId, add),
 
