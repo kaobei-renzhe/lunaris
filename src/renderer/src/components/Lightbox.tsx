@@ -8,6 +8,7 @@ import PhotoInspector, {
   type InspectorTabRequest
 } from './inspector/PhotoInspector'
 import type { PushUndo } from './inspector/ui'
+import { inAiScope, outOfScopeText, type AiScope } from '../lib/aiScope'
 
 interface LightboxProps {
   items: Item[]
@@ -20,6 +21,8 @@ interface LightboxProps {
   onPushUndo: PushUndo
   aiReady: boolean
   canAsk: boolean
+  /** AI 处理范围：超出范围的单张不显示 AI 操作 */
+  aiScope: AiScope | null
 }
 
 /** 适应窗口时四周留出的边距 */
@@ -38,10 +41,14 @@ export default function Lightbox({
   onRefresh,
   onPushUndo,
   aiReady,
-  canAsk
+  canAsk,
+  aiScope
 }: LightboxProps) {
   const item = items[index]
   const itemId = item?.id ?? 0
+  // 超出 AI 处理范围时，研读里的 AI 入口一并隐藏
+  const scopeBlocked = Boolean(item && aiScope && !inAiScope(item, aiScope))
+  const scopeHint = scopeBlocked && item && aiScope ? outOfScopeText(item, aiScope) : ''
   const stageRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const [natural, setNatural] = useState({ w: 0, h: 0 })
@@ -628,7 +635,9 @@ export default function Lightbox({
               facet={{ onChanged: onRefresh }}
               study={{
                 aiReady,
-                canAsk,
+                canAsk: canAsk && !scopeBlocked,
+                scopeBlocked,
+                scopeHint,
                 onNotesChange: setThreads,
                 region,
                 drawing,

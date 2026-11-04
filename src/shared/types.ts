@@ -825,7 +825,10 @@ export interface Api {
   /** AI 评分的最低星级：0 = 全部照片 */
   getAiScoreMinRating: () => Promise<number>
   saveAiScoreMinRating: (value: number) => Promise<number>
-  /** 当前范围内可评分的照片数（matched 满足星级门槛，total 全部可评分） */
+  /** AI 处理的文件夹范围：空数组 = 不限 */
+  getAiFolderIds: () => Promise<number[]>
+  saveAiFolderIds: (ids: number[]) => Promise<number[]>
+  /** 当前范围内可评分的照片数（matched 满足星级与文件夹范围，total 全部可评分） */
   aiScoreCandidates: () => Promise<{ matched: number; total: number }>
   startDrag: (itemId: number) => void
   confirm: (message: string, detail?: string) => Promise<boolean>

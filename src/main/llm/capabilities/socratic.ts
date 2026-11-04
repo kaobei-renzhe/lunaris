@@ -41,7 +41,7 @@ function formatHistory(history: SocraticTurn[]): string {
 export const socraticCapability: LlmCapability<SocraticInput, SocraticReply> = {
   id: 'photo.socratic',
   title: '读片对话',
-  description: '圈选画面局部提问，老师先反问引导，最多两轮后给解释',
+  description: '对着照片提问，AI 先反问引导，最多两轮再讲解',
   maxItems: 1,
   async run(ctx, input) {
     const itemId = Number(input?.itemId)

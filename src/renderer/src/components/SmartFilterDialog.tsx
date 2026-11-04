@@ -3,6 +3,8 @@ import { AlertTriangle, Loader2, Search, Settings, Sparkles, X } from 'lucide-re
 import type { Item } from '@shared/types'
 import type { LlmErrorCode, SmartFilterResult } from '@shared/llm'
 import { thumbUrl } from '../lib/format'
+import { inAiScope, loadAiScope, type AiScope } from '../lib/aiScope'
+import { estimateBatchTokens, formatTokens } from '../lib/aiCost'
 import { llmHint } from '../lib/llmHint'
 
 interface SmartFilterDialogProps {
@@ -29,8 +31,23 @@ export default function SmartFilterDialog({
   const [phase, setPhase] = useState<Phase>('idle')
   const [result, setResult] = useState<SmartFilterResult | null>(null)
   const [error, setError] = useState<{ code: LlmErrorCode; message: string } | null>(null)
+  /** 设置里的「AI 处理范围」：星级门槛 + 文件夹范围；null = 还没读回来 */
+  const [scope, setScope] = useState<AiScope | null>(null)
 
-  const candidates = useMemo(() => items.slice(0, MAX_ITEMS), [items])
+  useEffect(() => {
+    void loadAiScope().then(setScope)
+  }, [])
+
+  const inScope = useMemo(
+    () => (scope === null ? [] : items.filter((item) => inAiScope(item, scope))),
+    [items, scope]
+  )
+  const candidates = useMemo(() => inScope.slice(0, MAX_ITEMS), [inScope])
+  const skipped = items.length - inScope.length
+  const cost = useMemo(
+    () => estimateBatchTokens('smartFilter', candidates.length),
+    [candidates.length]
+  )
   const itemMap = useMemo(() => new Map(items.map((item) => [item.id, item])), [items])
   const reasonMap = useMemo(
     () => new Map((result?.reasons ?? []).map((entry) => [entry.itemId, entry.reason])),
@@ -48,6 +65,16 @@ export default function SmartFilterDialog({
   const run = async (): Promise<void> => {
     const text = rule.trim()
     if (!text || phase === 'loading' || candidates.length === 0) return
+    // 张数多时先提醒量级：一次筛选最多 30 张，按批送模型，token 会明显上去
+    if (cost.heavy) {
+      const ok = await window.api.confirm(
+        '这次 AI 筛选会消耗较多 token',
+        `这次要处理 ${candidates.length} 张照片，预计消耗 ${formatTokens(
+          cost.tokens
+        )}（粗估）。确认继续吗？`
+      )
+      if (!ok) return
+    }
     setPhase('loading')
     setError(null)
     const outcome = await window.api.llmRun('photo.smartFilter', {
@@ -66,6 +93,12 @@ export default function SmartFilterDialog({
 
   const needsSettings = error?.code === 'not_configured' || error?.code === 'auth'
   const matched = result?.matchedIds ?? []
+  const scopeHint = [
+    scope && scope.minRating > 0 ? `需 ${scope.minRating} 星及以上` : '',
+    scope && scope.folderIds.length > 0 ? '在选中的文件夹里' : ''
+  ]
+    .filter(Boolean)
+    .join('，且')
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60" onClick={onClose}>
@@ -102,8 +135,9 @@ export default function SmartFilterDialog({
 
           <div className="mt-2 flex items-center gap-2 text-[10.5px] text-[var(--faint)]">
             <span>
-              当前视图 {total} 张，一次最多看 {MAX_ITEMS} 张
-              {items.length < total ? '（取已加载的前 30 张）' : ''}
+              当前视图 {total} 张 · 本次最多看 {MAX_ITEMS} 张
+              {items.length < total ? '（从已加载的照片里取前 30 张）' : ''}
+              {skipped > 0 && scope ? ` · 已跳过 ${skipped} 张（不在 AI 处理范围）` : ''}
             </span>
             <button
               className="btn h-7 px-2.5 text-[11.5px] ml-auto"
@@ -115,6 +149,14 @@ export default function SmartFilterDialog({
               {phase === 'loading' ? '筛选中…' : '开始筛选'}
             </button>
           </div>
+
+          {scope !== null && candidates.length === 0 && (
+            <div className="mt-3 rounded-lg border border-[var(--warn)]/40 bg-[var(--panel-2)] px-3 py-2.5 text-[11px] leading-5 text-[var(--warn)]">
+              当前视图里没有符合「AI 处理范围」的照片
+              {scopeHint ? `（需要${scopeHint}）` : ''}
+              。可以先给照片打星，或到「设置 → 语义索引 → AI 处理范围」放宽条件。
+            </div>
+          )}
 
           {phase === 'error' && error && (
             <div className="mt-3 rounded-lg border border-[var(--danger-border)] bg-[var(--danger-soft)] px-3 py-2.5">
@@ -174,7 +216,9 @@ export default function SmartFilterDialog({
 
         <div className="shrink-0 px-4 py-2.5 border-t border-[var(--border)] flex items-center gap-2">
           <span className="text-[10.5px] text-[var(--faint)]">
-            点「开始筛选」才会发请求，一次会带上这 {candidates.length} 张图（消耗 token）
+            只有点「开始筛选」才会发请求 · 这 {candidates.length} 张预计消耗{' '}
+            {formatTokens(cost.tokens)}
+            {cost.heavy ? '（量较大，会先确认）' : ''}
           </span>
           <div className="ml-auto flex items-center gap-1.5">
             {needsSettings && (

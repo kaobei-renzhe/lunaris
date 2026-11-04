@@ -15,7 +15,7 @@ const SYSTEM = `你是一位严格的摄影评审。请从四个维度给照片�
 export const qualityCapability: LlmCapability<{ itemIds: number[] }, PhotoQualityResult> = {
   id: 'photo.quality',
   title: '照片质量评分',
-  description: '对构图、曝光、色彩、清晰度打分，并给出可用性总分与评语',
+  description: '给照片的构图、曝光、色彩、清晰度打分，并写一句总评',
   maxItems: 12,
   async run(ctx, input) {
     const ids = [...new Set((input.itemIds ?? []).filter((id) => Number.isInteger(id)))]

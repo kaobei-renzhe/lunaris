@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 import { ArrowLeft, Camera, Folder as FolderIcon, Images, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Facet, FacetValue, Folder, Item, Tag } from '@shared/types'
 import { photoUrl, thumbUrl } from './lib/format'
+import { inAiScope, outOfScopeText, type AiScope } from './lib/aiScope'
 import Lightbox from './components/Lightbox'
 import PhotoInspector from './components/inspector/PhotoInspector'
 
@@ -11,6 +12,8 @@ interface PortraitWorkspaceProps {
   /** 大模型总开关与读片对话能力 */
   aiReady: boolean
   canAsk: boolean
+  /** AI 处理范围：超出范围的单张不显示 AI 操作 */
+  aiScope: AiScope | null
 }
 
 const PAGE_LIMIT = 500
@@ -19,7 +22,12 @@ const PAGE_LIMIT = 500
  * 人像工作台：左维度 / 中瀑布流 / 右详情。
  * 维度与取值本质是带 facet_id 的普通标签，所以照片上已有的标记、筛选都能直接复用。
  */
-export default function PortraitWorkspace({ onBack, aiReady, canAsk }: PortraitWorkspaceProps) {
+export default function PortraitWorkspace({
+  onBack,
+  aiReady,
+  canAsk,
+  aiScope
+}: PortraitWorkspaceProps) {
   const [facets, setFacets] = useState<Facet[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [tags, setTags] = useState<Tag[]>([])
@@ -93,6 +101,10 @@ export default function PortraitWorkspace({ onBack, aiReady, canAsk }: PortraitW
     [items, activeId]
   )
   const targets = selection.length ? selection : activeId ? [activeId] : []
+  // AI 处理范围外的人像照不显示 AI 对话入口
+  const currentScopeBlocked = Boolean(current && aiScope && !inAiScope(current, aiScope))
+  const currentScopeHint =
+    current && currentScopeBlocked && aiScope ? outOfScopeText(current, aiScope) : ''
   const valueName = useMemo(() => {
     const map = new Map<number, { name: string; color: string }>()
     for (const facet of facets) {
@@ -517,7 +529,12 @@ export default function PortraitWorkspace({ onBack, aiReady, canAsk }: PortraitW
                   compact
                   showPreview={false}
                   facet={{ targetIds: targets, onApplyValue: applyValue }}
-                  study={{ aiReady, canAsk }}
+                  study={{
+                    aiReady,
+                    canAsk: canAsk && !currentScopeBlocked,
+                    scopeBlocked: currentScopeBlocked,
+                    scopeHint: currentScopeHint
+                  }}
                 />
               </div>
             </>
@@ -541,6 +558,7 @@ export default function PortraitWorkspace({ onBack, aiReady, canAsk }: PortraitW
           onPushUndo={() => undefined}
           aiReady={aiReady}
           canAsk={canAsk}
+          aiScope={aiScope}
         />
       )}
     </div>

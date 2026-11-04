@@ -16,6 +16,7 @@ import {
 import type {
   EmbeddingModelId,
   EmbeddingModelInfo,
+  Folder,
   LibraryStorage,
   ThemeMode,
   XmpProgress,
@@ -43,6 +44,8 @@ interface SettingsDialogProps {
   /** 瀑布流缩略图清晰度，改完立即生效 */
   thumbQuality: ThumbQualityPref
   onThumbQuality: (pref: ThumbQualityPref) => void
+  /** 全部文件夹，用来选 AI 处理的文件夹范围 */
+  folders: Folder[]
   onClose: () => void
   /** 打开时默认停在哪个分类（AI 弹窗的「去设置」直接落到大模型） */
   initialTab?: SettingsTab
@@ -51,7 +54,7 @@ interface SettingsDialogProps {
 const TABS: Array<{ id: SettingsTab; label: string; hint: string; Icon: typeof Monitor }> = [
   { id: 'appearance', label: '外观', hint: '主题与界面风格', Icon: Palette },
   { id: 'llm', label: '大模型', hint: '服务商、密钥、能力开关', Icon: Sparkles },
-  { id: 'semantic', label: '语义索引', hint: '闲时自动建立向量索引', Icon: Cpu },
+  { id: 'semantic', label: '语义索引', hint: '闲着时自动给照片建索引，方便搜图', Icon: Cpu },
   { id: 'storage', label: '存储位置', hint: '索引与缓存放在哪', Icon: HardDrive }
 ]
 
@@ -73,6 +76,7 @@ export default function SettingsDialog({
   onSkin,
   thumbQuality,
   onThumbQuality,
+  folders,
   onClose,
   initialTab = 'appearance'
 }: SettingsDialogProps) {
@@ -85,6 +89,8 @@ export default function SettingsDialog({
   const [modelMsg, setModelMsg] = useState<string | null>(null)
   const [scoreMinRating, setScoreMinRating] = useState<number | null>(null)
   const [scoreCounts, setScoreCounts] = useState<{ matched: number; total: number } | null>(null)
+  /** AI 处理的文件夹范围；null = 还没读回来 */
+  const [scopeFolders, setScopeFolders] = useState<number[] | null>(null)
   const [scoreBusy, setScoreBusy] = useState(false)
   const [llm, setLlm] = useState<LlmStatus | null>(null)
   const [llmDraft, setLlmDraft] = useState({ baseUrl: '', model: '' })
@@ -118,6 +124,10 @@ export default function SettingsDialog({
       .getAiScoreMinRating()
       .then(setScoreMinRating)
       .catch(() => setScoreMinRating(0))
+    void window.api
+      .getAiFolderIds()
+      .then(setScopeFolders)
+      .catch(() => setScopeFolders([]))
     void window.api
       .aiScoreCandidates()
       .then(setScoreCounts)
@@ -162,6 +172,27 @@ export default function SettingsDialog({
     } finally {
       setScoreBusy(false)
     }
+  }
+
+  /** 改 AI 处理的文件夹范围：空数组表示全部文件夹 */
+  const changeScopeFolders = async (next: number[]): Promise<void> => {
+    if (scoreBusy) return
+    setScoreBusy(true)
+    try {
+      const saved = await window.api.saveAiFolderIds(next)
+      setScopeFolders(saved)
+      setScoreCounts(await window.api.aiScoreCandidates())
+    } catch {
+      /* 保存失败保持原值 */
+    } finally {
+      setScoreBusy(false)
+    }
+  }
+
+  /** 点一下切换选中：已选就取消，没选就加上 */
+  const toggleFolder = (id: number): number[] => {
+    const current = scopeFolders ?? []
+    return current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
   }
 
   /** 改上限：调小时主进程会立刻按最久未用淘汰一次 */
@@ -640,7 +671,7 @@ export default function SettingsDialog({
                         <div className="text-[12.5px]">启用大模型能力</div>
                         <div className="text-[10.5px] leading-4 text-[var(--faint)] mt-0.5">
                           默认关闭。关闭时相册里不会出现任何 AI 按钮，也不会发出网络请求；开启后也不会自己跑，
-                          只有你在相册里点 AI 按钮时才会调用，每次都会消耗服务商的 token 额度。
+                          只有你在相册里点 AI 按钮时才会调用，每次调用都会消耗你账户里的 token。
                         </div>
                       </div>
                       <button
@@ -977,7 +1008,7 @@ export default function SettingsDialog({
                   手动点侧栏「语义索引」仍会一次性把剩余照片跑完，中断后可以再点一次继续。
                 </div>
 
-                <div className="mt-2 text-[12.5px]">AI 评分范围</div>
+                <div className="mt-2 text-[12.5px]">AI 处理范围</div>
                 <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5 space-y-2">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {[{ value: 0, label: '全部照片' }]
@@ -1002,15 +1033,57 @@ export default function SettingsDialog({
                       })}
                   </div>
                   <div className="text-[10.5px] leading-4 text-[var(--faint)]">
-                    选定星级后，AI 评分只处理「星级 ≥ 该值」的照片；低于该星级、以及没有标星的照片会被自动跳过。
-                    这项设置只影响 AI 评分队列，不改变相册里的筛选与排序。
+                    AI 只处理达到这个星级的照片，默认 ★★★；没标星的照片算不达标。选「全部照片」就不限星级。
                   </div>
                   <div className="text-[10.5px] leading-4 text-[var(--faint)]">
-                    当前范围：
-                    {scoreCounts
-                      ? `${scoreCounts.matched} / ${scoreCounts.total} 张可评分`
-                      : '读取中…'}
-                    {scoreMinRating ? `（门槛 ${scoreMinRating} 星）` : '（全部照片）'}
+                    范围内的照片才会出现 AI 评分、AI 后期建议和读片入口；不达标就把按钮藏起来，已有的评分和笔记照常能看。
+                  </div>
+                  <div className="text-[10.5px] leading-4 text-[var(--faint)]">
+                    当前有 {scoreCounts ? `${scoreCounts.matched} / ${scoreCounts.total} 张` : '读取中…'}在范围内
+                    {`（星级：${scoreMinRating ? `≥ ${scoreMinRating} 星` : '不限'}；文件夹：${
+                      (scopeFolders ?? []).length > 0 ? `${(scopeFolders ?? []).length} 个` : '全部'
+                    }）`}
+                  </div>
+
+                  <div className="mt-1 text-[10.5px] leading-4 text-[var(--faint)]">文件夹范围</div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      className={`h-[26px] px-2 rounded-md border text-[11.5px] transition-colors ${
+                        (scopeFolders ?? []).length === 0
+                          ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]'
+                          : 'border-[var(--border)] bg-[var(--panel)] text-[var(--faint)]'
+                      }`}
+                      onClick={() => void changeScopeFolders([])}
+                      disabled={scopeFolders === null}
+                    >
+                      全部文件夹
+                    </button>
+                    {folders.map((folder) => {
+                      const active = (scopeFolders ?? []).includes(folder.id)
+                      return (
+                        <button
+                          key={folder.id}
+                          className={`h-[26px] px-2 rounded-md border text-[11.5px] transition-colors ${
+                            active
+                              ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]'
+                              : 'border-[var(--border)] bg-[var(--panel)] text-[var(--faint)]'
+                          }`}
+                          onClick={() => void changeScopeFolders(toggleFolder(folder.id))}
+                          disabled={scopeFolders === null}
+                          title={`${folder.name} · ${folder.count} 张`}
+                        >
+                          {folder.name}
+                        </button>
+                      )
+                    })}
+                    {folders.length === 0 && (
+                      <span className="text-[10.5px] text-[var(--faint)]">
+                        还没有文件夹。先在左侧新建文件夹，就能在这里限定范围
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10.5px] leading-4 text-[var(--faint)]">
+                    不选就是所有文件夹；选了以后，只有这些文件夹里的照片能用到 AI。
                   </div>
                 </div>
               </>

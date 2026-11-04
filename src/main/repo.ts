@@ -613,16 +613,35 @@ export function trashMissing(): number[] {
 
 /**
  * AI 评分的候选数量。
- * total = 可参与评分的照片（未删、未丢、没有导入错误）；matched = 其中满足星级门槛的。
- * 门槛为 0 时两者相等，未标星的照片也会被算进去。
+ * total = 可参与评分的照片（未删、未丢、没有导入错误）；matched = 其中同时满足星级门槛与文件夹范围的。
+ * 两个范围都不限时两者相等，未标星的照片也会被算进去。
  */
-export function scoreCandidateCounts(minRating: number): { matched: number; total: number } {
+export function scoreCandidateCounts(
+  minRating: number,
+  folderIds: number[] = []
+): { matched: number; total: number } {
   const db = getDb()
   const base = 'FROM items WHERE trashed = 0 AND missing = 0 AND error IS NULL'
   const total = (db.prepare(`SELECT COUNT(*) AS c ${base}`).get() as { c: number }).c
-  if (!(minRating > 0)) return { matched: total, total }
+  const clauses: string[] = []
+  const params: number[] = []
+  if (minRating > 0) {
+    clauses.push('rating >= ?')
+    params.push(minRating)
+  }
+  if (folderIds.length > 0) {
+    clauses.push(
+      `id IN (SELECT item_id FROM item_folders WHERE folder_id IN (${folderIds
+        .map(() => '?')
+        .join(',')}))`
+    )
+    params.push(...folderIds)
+  }
+  if (clauses.length === 0) return { matched: total, total }
   const matched = (
-    db.prepare(`SELECT COUNT(*) AS c ${base} AND rating >= ?`).get(minRating) as { c: number }
+    db.prepare(`SELECT COUNT(*) AS c ${base} AND ${clauses.join(' AND ')}`).get(...params) as {
+      c: number
+    }
   ).c
   return { matched, total }
 }

@@ -18,7 +18,7 @@ export const smartFilterCapability: LlmCapability<
 > = {
   id: 'photo.smartFilter',
   title: '智能筛选',
-  description: '按自然语言规则批量挑图，返回命中的图片与逐张理由',
+  description: '用一句话描述想挑什么图，AI 帮你从一批里选出来，并说明理由',
   maxItems: 30,
   async run(ctx, input) {
     const rule = String(input?.rule ?? '').trim()

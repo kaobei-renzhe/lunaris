@@ -29,6 +29,9 @@ export interface StudyTabProps {
   aiReady?: boolean
   /** 读片对话能力是否开启 */
   canAsk?: boolean
+  /** 这张不在 AI 处理范围内：隐藏所有 AI 入口，只留手工笔记 */
+  scopeBlocked?: boolean
+  scopeHint?: string
   /** 灯箱用：把最新线程同步出去，圈选层跟着增删刷新 */
   onNotesChange?: (threads: NoteThread[]) => void
   /** 灯箱用：已框好、还没提交的区域 */
@@ -77,6 +80,8 @@ export default function StudyTab({
   compact,
   aiReady = false,
   canAsk = false,
+  scopeBlocked = false,
+  scopeHint = '',
   onNotesChange,
   region = null,
   drawing = false,
@@ -300,7 +305,7 @@ export default function StudyTab({
     }
   }
 
-  const aiAvailable = aiReady && canAsk
+  const aiAvailable = aiReady && canAsk && !scopeBlocked
   const rootThinking = aiBusy && aiThreadId === null
 
   return (
@@ -328,9 +333,11 @@ export default function StudyTab({
       <div className="text-[10px] leading-4 text-[var(--faint)]">
         {!aiReady
           ? '大模型未启用，仍可手工记笔记；到「设置 → 大模型」配置后就能让老师反问。'
-          : !canAsk
-            ? '读片对话能力已关闭，仍可手工记笔记。'
-            : 'AI 会先反问，最多两轮；也可以直接让它给答案。'}
+          : scopeBlocked
+            ? `${scopeHint || '这张不在「AI 处理范围」内'}，AI 对话不可用；手工记笔记不受影响。`
+            : !canAsk
+              ? '读片对话能力已关闭，仍可手工记笔记。'
+              : 'AI 会先反问，最多两轮；也可以直接让它给答案。'}
       </div>
 
       {error && (

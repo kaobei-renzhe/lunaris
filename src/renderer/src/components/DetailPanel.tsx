@@ -2,11 +2,14 @@ import { X } from 'lucide-react'
 import type { Folder, Item, Tag } from '@shared/types'
 import PhotoInspector from './inspector/PhotoInspector'
 import type { PushUndo } from './inspector/ui'
+import { inAiScope, outOfScopeText, type AiScope } from '../lib/aiScope'
 
 interface DetailPanelProps {
   item: Item
   tags: Tag[]
   folders: Folder[]
+  /** AI 处理范围：超出范围的单张不显示 AI 操作 */
+  aiScope: AiScope | null
   onClose: () => void
   onRefresh: () => void
   onOpenLightbox: () => void
@@ -29,6 +32,7 @@ export default function DetailPanel({
   item,
   tags,
   folders,
+  aiScope,
   onClose,
   onRefresh,
   onOpenLightbox,
@@ -43,6 +47,10 @@ export default function DetailPanel({
   canAdvice,
   canStudy
 }: DetailPanelProps) {
+  // 超出 AI 处理范围时不显示任何 AI 操作，已评过的分数照常能看
+  const scopeBlocked = aiScope !== null && !inAiScope(item, aiScope)
+  const scopeHint = scopeBlocked && aiScope ? outOfScopeText(item, aiScope) : ''
+
   return (
     <aside
       className="flex min-h-0 shrink-0 flex-col overflow-x-hidden border-l border-[var(--border)] bg-[var(--panel)]"
@@ -73,11 +81,19 @@ export default function DetailPanel({
           }}
           perf={
             aiReady && (canScore || canAdvice)
-              ? { aiScoring, canScore, canAdvice, onScore, onAdvice }
+              ? {
+                  aiScoring,
+                  canScore: canScore && !scopeBlocked,
+                  canAdvice: canAdvice && !scopeBlocked,
+                  scopeBlocked,
+                  scopeHint,
+                  onScore,
+                  onAdvice
+                }
               : undefined
           }
           facet={{ onChanged: onRefresh }}
-          study={{ aiReady, canAsk: canStudy }}
+          study={{ aiReady, canAsk: canStudy && !scopeBlocked, scopeBlocked, scopeHint }}
         />
       </div>
     </aside>

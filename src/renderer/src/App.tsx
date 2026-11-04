@@ -48,6 +48,8 @@ import ResumeImportCard from './components/ResumeImportCard'
 import Welcome from './components/Welcome'
 import LibrarySwitcher from './components/LibrarySwitcher'
 import { formatBytes, folderName, samePath } from './lib/format'
+import { inAiScope, loadAiScope, type AiScope } from './lib/aiScope'
+import { estimateBatchTokens, formatTokens } from './lib/aiCost'
 import { useLayoutSizes } from './hooks/useLayoutSizes'
 import { useAppearance } from './hooks/useAppearance'
 import { useLightbox } from './hooks/useLightbox'
@@ -112,6 +114,8 @@ export default function App() {
   const [aiReady, setAiReady] = useState(false)
   /** 每个能力自己的开关，关掉后对应入口直接隐藏 */
   const [aiCaps, setAiCaps] = useState<Record<string, boolean>>({})
+  /** AI 处理范围（星级 + 文件夹）：单张的 AI 入口据此显隐；null = 还没读回来 */
+  const [aiScope, setAiScope] = useState<AiScope | null>(null)
   const [smartFilterOpen, setSmartFilterOpen] = useState(false)
   const [pickExportOpen, setPickExportOpen] = useState(false)
   const [finalsExportOpen, setFinalsExportOpen] = useState(false)
@@ -210,6 +214,8 @@ export default function App() {
     setStats(nextStats)
     setDirTree(nextDirs)
     setFacets(nextFacets)
+    // 文件夹可能刚被删或新建，处理范围跟着刷新，免得按钮该出现却不出现
+    void loadAiScope().then(setAiScope)
   }, [])
 
   useEffect(() => {
@@ -588,23 +594,39 @@ export default function App() {
   const scoreItems = useCallback(
     async (ids: number[]) => {
       if (!ids.length || aiScoringRef.current) return
-      // 星级门槛由设置页决定：低于门槛和没标星（0 星）的照片不进评分队列
-      const minRating = await window.api.getAiScoreMinRating().catch(() => 0)
-      const ratings = new Map(itemsRef.current.map((item) => [item.id, item.rating]))
-      const candidates = pickScorable(ids, ratings, minRating)
+      // 批量评分只处理设置里圈定的范围；单张按钮在范围外根本不会出现
+      const scope = await loadAiScope()
+      const items = itemsRef.current
+      const ratings = new Map(items.map((item) => [item.id, item.rating]))
+      const inScope = new Set(
+        items.filter((item) => inAiScope(item, scope)).map((item) => item.id)
+      )
+      const candidates = pickScorable(ids, ratings, scope.minRating).filter((id) =>
+        inScope.has(id)
+      )
       const skipped = ids.length - candidates.length
       if (!candidates.length) {
-        notify(`AI 评分要求星级 ≥ ${minRating} 星，本次选中的照片都不满足，已全部跳过`)
+        const rule = [
+          scope.minRating > 0 ? `${scope.minRating} 星及以上` : '',
+          scope.folderIds.length > 0 ? '在选中的文件夹里' : ''
+        ]
+          .filter(Boolean)
+          .join('、')
+        notify(`选中的照片都不在「AI 处理范围」内${rule ? `（需要${rule}）` : ''}，已全部跳过`)
         return
       }
       const picked = candidates.slice(0, 12)
-      // 批量处理前先把数量交给用户确认；单张点选不再多弹一次
+      // 批量处理前先把数量和预估 token 交给用户确认；单张点选不再多弹一次
       if (picked.length > 1) {
+        const cost = estimateBatchTokens('quality', picked.length)
         const detail =
-          `本次将对 ${picked.length} 张照片评分` +
-          (minRating > 0 ? `（仅星级 ≥ ${minRating}，跳过 ${skipped} 张）` : '') +
-          '。评分会调用你配置的模型并消耗 token。'
-        const ok = await window.api.confirm('AI 评分', detail)
+          `本次会给 ${picked.length} 张照片评分，预计消耗 ${formatTokens(cost.tokens)}（粗估）。` +
+          (skipped > 0 ? `另有 ${skipped} 张不在处理范围，会跳过。` : '') +
+          (cost.heavy ? '这次调用量较大，确认后才会开始。' : '')
+        const ok = await window.api.confirm(
+          cost.heavy ? '这次 AI 评分会消耗较多 token' : 'AI 评分',
+          detail
+        )
         if (!ok) return
       }
       aiScoringRef.current = true
@@ -621,8 +643,8 @@ export default function App() {
           : 0
         const extra = [
           failed.length ? `${failed.length} 张失败` : '',
-          skipped ? `跳过 ${skipped} 张（星级不足）` : '',
-          candidates.length > picked.length ? `只评了前 ${picked.length} 张` : ''
+          skipped ? `跳过 ${skipped} 张不在处理范围` : '',
+          candidates.length > picked.length ? `本次只评了前 ${picked.length} 张` : ''
         ]
           .filter(Boolean)
           .join('，')
@@ -646,7 +668,12 @@ export default function App() {
 
   // 设置面板开关/换 Key 后回到主界面要立刻反映到 AI 入口的可用状态
   useEffect(() => {
-    if (!library) return
+    if (!library) {
+      setAiScope(null)
+      return
+    }
+    // 处理范围跟着图库与设置走：换库或关掉设置面板时重新读一次
+    void loadAiScope().then(setAiScope)
     void window.api
       .llmStatus()
       .then((status) => {
@@ -1158,6 +1185,7 @@ export default function App() {
         onBack={() => setPortraitOpen(false)}
         aiReady={aiReady}
         canAsk={aiCaps['photo.socratic'] !== false}
+        aiScope={aiScope}
       />
     )
   }
@@ -1338,6 +1366,7 @@ export default function App() {
             item={activeItem}
             tags={tags}
             folders={folders}
+            aiScope={aiScope}
             onClose={() => setActiveId(null)}
             onRefresh={bump}
             onOpenLightbox={() => openLightbox(activeItem.id)}
@@ -1506,6 +1535,7 @@ export default function App() {
           onPushUndo={pushUndo}
           aiReady={aiReady}
           canAsk={aiCaps['photo.socratic'] !== false}
+          aiScope={aiScope}
         />
       )}
 
@@ -1583,6 +1613,7 @@ export default function App() {
           onSkin={changeSkin}
           thumbQuality={thumbQuality}
           onThumbQuality={changeThumbQuality}
+          folders={folders}
           onClose={() => {
             setSettingsOpen(false)
             // XMP 导入可能改了星级/标签，关掉设置后刷新一次

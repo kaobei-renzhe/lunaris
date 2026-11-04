@@ -54,6 +54,8 @@ export interface AppConfig {
   thumbCacheLimitMB?: number
   /** AI 评分的最低星级：0 = 全部；>0 时只评 rating >= N，未标星（0 星）不参与 */
   aiScoreMinRating?: number
+  /** AI 处理范围：只处理这些文件夹里的照片；空数组 = 不限 */
+  aiFolderIds?: number[]
   llm?: Partial<LlmConfig>
   /** 客户选片：记住上次的输出目录、客户名与水印模板 */
   pick?: {
@@ -240,10 +242,11 @@ export function saveThumbCacheLimitMB(mb: number): number {
   return next
 }
 
-/** AI 评分的最低星级：0 = 全部照片，1–5 = 只评该星级及以上的照片 */
+/** AI 批量处理的星级门槛：默认 3 星；0 = 全部照片，1–5 = 只处理该星级及以上 */
 export function getAiScoreMinRating(): number {
   const stored = readConfig().aiScoreMinRating
-  if (typeof stored !== 'number' || !Number.isFinite(stored)) return 0
+  // 没配过就走保守默认：只处理三星及以上，避免把整库废片都送进模型
+  if (typeof stored !== 'number' || !Number.isFinite(stored)) return 3
   const value = Math.round(stored)
   return value >= 1 && value <= 5 ? value : 0
 }
@@ -252,6 +255,19 @@ export function saveAiScoreMinRating(value: number): number {
   const rounded = Number.isFinite(value) ? Math.round(value) : 0
   const next = rounded >= 1 && rounded <= 5 ? rounded : 0
   updateConfig({ aiScoreMinRating: next })
+  return next
+}
+
+/** AI 处理的文件夹范围：空数组表示不限；只存文件夹 id，失效 id 由读取方按当前图库清掉 */
+export function getAiFolderIds(): number[] {
+  const stored = readConfig().aiFolderIds
+  if (!Array.isArray(stored)) return []
+  return [...new Set(stored.filter((id) => Number.isInteger(id) && id > 0))]
+}
+
+export function saveAiFolderIds(ids: number[]): number[] {
+  const next = [...new Set((Array.isArray(ids) ? ids : []).filter((id) => Number.isInteger(id) && id > 0))]
+  updateConfig({ aiFolderIds: next })
   return next
 }
 

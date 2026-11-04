@@ -14,7 +14,7 @@ const SYSTEM = `你是资深商业摄影师与后期师。针对用户给的一�
 export const adviceCapability: LlmCapability<{ itemId: number }, PhotoAdvice> = {
   id: 'photo.advice',
   title: '后期优化建议',
-  description: '针对单张照片输出修图方向、参数调整建议与风格参考',
+  description: '针对一张照片，给出修图方向、参数调整和风格参考',
   maxItems: 1,
   async run(ctx, input) {
     const itemId = Number(input?.itemId)

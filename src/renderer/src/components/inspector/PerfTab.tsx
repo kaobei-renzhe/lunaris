@@ -8,6 +8,9 @@ export interface PerfTabProps {
   aiScoring: boolean
   canScore: boolean
   canAdvice: boolean
+  /** 这张不在 AI 处理范围内：不渲染任何 AI 按钮，只说明原因 */
+  scopeBlocked?: boolean
+  scopeHint?: string
   onScore: () => void
   onAdvice: () => void
 }
@@ -17,6 +20,8 @@ export default function PerfTab({
   aiScoring,
   canScore,
   canAdvice,
+  scopeBlocked = false,
+  scopeHint = '',
   onScore,
   onAdvice
 }: PerfTabProps) {
@@ -70,33 +75,39 @@ export default function PerfTab({
         </Section>
       ) : (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-3 text-[11.5px] leading-5 text-[var(--faint)]">
-          这张还没有 AI 评分。评分会调用一次大模型并消耗 token。
+          这张还没有 AI 评分。
         </div>
       )}
 
-      {(canScore || canAdvice) && (
-        <div className={`mt-3 grid gap-1.5 ${canScore && canAdvice ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          {canScore && (
-            <button
-              className="btn h-7 px-2 text-[11.5px]"
-              onClick={onScore}
-              disabled={aiScoring}
-              title="用大模型评估构图、曝光、色彩、清晰度，结果存进图库（会消耗 token）"
-            >
-              <Gauge size={12} color="var(--accent-2)" />
-              {aiScoring ? '评分中…' : item.quality ? '重新评分' : 'AI 评分'}
-            </button>
-          )}
-          {canAdvice && (
-            <button
-              className="btn h-7 px-2 text-[11.5px]"
-              onClick={onAdvice}
-              title="让大模型给出修图方向、参数调整与风格参考（会消耗 token）"
-            >
-              <Sparkles size={12} color="var(--accent-2)" /> AI 后期建议
-            </button>
-          )}
+      {scopeBlocked ? (
+        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-2.5 py-2 text-[10.5px] leading-4 text-[var(--faint)]">
+          {scopeHint || '这张不在「AI 处理范围」内'}，所以这里不显示 AI 评分和后期建议。想用的话，去「设置 → 语义索引 → AI 处理范围」放宽条件。
         </div>
+      ) : (
+        (canScore || canAdvice) && (
+          <div className={`mt-3 grid gap-1.5 ${canScore && canAdvice ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {canScore && (
+              <button
+                className="btn h-7 px-2 text-[11.5px]"
+                onClick={onScore}
+                disabled={aiScoring}
+                title="用大模型评估构图、曝光、色彩、清晰度，结果存进图库（会消耗 token）"
+              >
+                <Gauge size={12} color="var(--accent-2)" />
+                {aiScoring ? '评分中…' : item.quality ? '重新评分' : 'AI 评分'}
+              </button>
+            )}
+            {canAdvice && (
+              <button
+                className="btn h-7 px-2 text-[11.5px]"
+                onClick={onAdvice}
+                title="让大模型给出修图方向、参数调整与风格参考（会消耗 token）"
+              >
+                <Sparkles size={12} color="var(--accent-2)" /> AI 后期建议
+              </button>
+            )}
+          </div>
+        )
       )}
 
       <div className="mt-3 text-[10px] leading-4 text-[var(--faint)]">

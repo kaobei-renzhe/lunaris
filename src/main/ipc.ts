@@ -30,6 +30,8 @@ import {
   getThumbQuality,
   getPickDefaults,
   getFinalsDefaults,
+  getAiFolderIds,
+  saveAiFolderIds,
   getXmpSettings,
   libraryKey,
   readConfig,
@@ -996,7 +998,25 @@ export function registerIpc(): void {
   // AI 评分的星级门槛：设置页读写 + 当前范围内的照片数
   ipcMain.handle('llm:scoreMinRating:get', () => getAiScoreMinRating())
   ipcMain.handle('llm:scoreMinRating:save', (_e, value: number) => saveAiScoreMinRating(value))
-  ipcMain.handle('llm:scoreCandidates', () => scoreCandidateCounts(getAiScoreMinRating()))
+  ipcMain.handle('llm:scopeFolders:get', () => {
+    const ids = getAiFolderIds()
+    if (!ids.length) return ids
+    // 文件夹可能被删过、或换过图库：清掉不存在的 id，别让范围莫名挡住照片
+    try {
+      const known = new Set(listFolders().map((folder) => folder.id))
+      const valid = ids.filter((id) => known.has(id))
+      if (valid.length !== ids.length) saveAiFolderIds(valid)
+      return valid
+    } catch {
+      return ids
+    }
+  })
+  ipcMain.handle('llm:scopeFolders:save', (_e, ids: number[]) =>
+    saveAiFolderIds(Array.isArray(ids) ? ids.map(Number) : [])
+  )
+  ipcMain.handle('llm:scoreCandidates', () =>
+    scoreCandidateCounts(getAiScoreMinRating(), getAiFolderIds())
+  )
 
   ipcMain.on('ui:dialog-reply', (_e, id: number, result: AppDialogResult) => {
     const resolve = pendingDialogs.get(id)
