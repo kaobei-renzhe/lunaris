@@ -143,17 +143,6 @@ const Card = memo(function Card({
           {'★'.repeat(item.rating)}
         </div>
       )}
-      {item.tags.length > 0 && (
-        <div className="absolute top-2 left-2 flex gap-1 pointer-events-none">
-          {item.tags.slice(0, 4).map((t) => (
-            <span
-              key={t.id}
-              className="w-[7px] h-[7px] rounded-full ring-1 ring-black/30"
-              style={{ background: t.color }}
-            />
-          ))}
-        </div>
-      )}
       <div className="absolute bottom-1.5 right-2 flex items-center gap-1 pointer-events-none">
         {item.missing === 1 && (
           <span className="px-1 py-[1px] rounded bg-[#7a2b2f] text-[9px] tracking-wide text-[#ffd7da]">
