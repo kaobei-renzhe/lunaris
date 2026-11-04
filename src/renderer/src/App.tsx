@@ -792,7 +792,9 @@ export default function App() {
         })
         return
       }
-      if (e.key === 'Delete' && (selectedIds.length || activeId)) {
+      // macOS 键盘的主删除键是 Backspace，Windows 上不认它，免得误删
+      const macDelete = e.key === 'Backspace' && navigator.platform.startsWith('Mac')
+      if ((e.key === 'Delete' || macDelete) && (selectedIds.length || activeId)) {
         e.preventDefault()
         void deleteSelected()
         return

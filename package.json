@@ -21,7 +21,6 @@
       "!**/node_modules/onnxruntime-node/bin/napi-*/win32/arm64/**"
     ],
     "npmRebuild": false,
-    "electronDist": "node_modules/electron/dist",
     "asarUnpack": [
       "**/*.node",
       "**/node_modules/onnxruntime-node/**",
@@ -37,6 +36,23 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "月相"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.photography",
+      "icon": "build/icon.png",
+      "files": [
+        "out/**/*",
+        "package.json",
+        "build/icon.png",
+        "!**/node_modules/onnxruntime-node/bin/napi-*/win32/**",
+        "!**/node_modules/onnxruntime-node/bin/napi-*/linux/**"
+      ]
+    },
+    "dmg": {
+      "title": "${productName} ${version}"
     }
   },
   "scripts": {
@@ -47,7 +63,8 @@
     "test": "vitest run",
     "bench": "node scripts/bench.mjs",
     "bench:clip": "node scripts/bench-clip.mjs",
-    "dist": "electron-vite build && electron-builder --win --publish never && node scripts/clean-release.mjs"
+    "dist": "electron-vite build && electron-builder --win --publish never --config.electronDist=node_modules/electron/dist && node scripts/clean-release.mjs",
+    "dist:mac": "electron-vite build && electron-builder --mac --publish never"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

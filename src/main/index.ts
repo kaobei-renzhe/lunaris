@@ -182,8 +182,9 @@ app.on('before-quit', () => {
 })
 
 app.on('window-all-closed', () => {
-  void log.info('app', '窗口全部关闭，退出')
+  void log.info('app', '窗口全部关闭', { platform: process.platform })
   stopLibraryWatcher()
   closeLibrary()
-  app.quit()
+  // macOS 的习惯是关掉窗口不退出应用，点 Dock 图标再打开
+  if (process.platform !== 'darwin') app.quit()
 })

@@ -1,0 +1,38 @@
+name: build-mac
+
+# 手动触发，或推 v* 标签时打 macOS 安装包。
+# 原生模块（better-sqlite3 / sharp / onnxruntime）按平台安装，所以只能在 macOS 上打包；
+# 这条流水线用的是 Apple 芯片的 runner，产出 arm64 的 dmg。
+# Intel 包请在 Intel Mac 上执行 npm ci && npm run dist:mac。
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build dmg
+        run: npm run dist:mac
+        env:
+          # 没有签名证书时跳过签名，产出的包首次打开需要右键「打开」
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lunaris-mac
+          path: release/*.dmg
+          if-no-files-found: error
