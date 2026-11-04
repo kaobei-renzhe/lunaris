@@ -336,6 +336,10 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
       )
     }
   }
+  if (filter.colorFamily) {
+    where.push('i.color_family = ?')
+    params.push(filter.colorFamily)
+  }
   if (filter.orientation === 'landscape') where.push('i.width > i.height')
   if (filter.orientation === 'portrait') where.push('i.height > i.width')
   if (filter.orientation === 'square') where.push('i.width = i.height')

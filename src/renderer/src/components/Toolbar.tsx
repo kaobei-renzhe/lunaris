@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import type { ClipStatus, FilterState, Folder } from '@shared/types'
 import { FLAG_FILTER_NOT_PICKED, FLAG_FILTER_NOT_REJECTED } from '@shared/types'
+import { COLOR_OPTIONS } from '../lib/format'
 
 interface ToolbarProps {
   filter: FilterState
@@ -95,6 +96,8 @@ export default function Toolbar({
   const [smartName, setSmartName] = useState('')
   /** 第二排筛选条件可以折叠，给图库让出高度 */
   const [filtersOpen, setFiltersOpen] = useState(true)
+  /** 主色筛选默认收起，展开才显示色块 */
+  const [colorOpen, setColorOpen] = useState(false)
 
   const patch = (next: Partial<FilterState>): void => onFilter({ ...filter, ...next })
   const facetCount = Object.values(filter.facets ?? {}).reduce(
@@ -108,6 +111,7 @@ export default function Toolbar({
     Boolean(filter.errors) ||
     (filter.tagIds?.length ?? 0) > 0 ||
     facetCount > 0 ||
+    Boolean(filter.colorFamily) ||
     Boolean(filter.orientation) ||
     Boolean(filter.flag) ||
     Boolean(filter.missing) ||
@@ -123,6 +127,7 @@ export default function Toolbar({
     filter.folderId,
     filter.dir,
     filter.errors,
+    filter.colorFamily,
     filter.orientation,
     filter.flag,
     filter.expandBursts,
@@ -135,6 +140,9 @@ export default function Toolbar({
     (filter.tagIds?.length ?? 0) > 0,
     facetCount > 0
   ].filter(Boolean).length
+
+  /** 当前选中的主色，用来在折叠按钮上点一个色点 */
+  const activeColor = COLOR_OPTIONS.find((option) => option.value === filter.colorFamily)
 
   const commitSmart = (): void => {
     if (smartName.trim()) onSaveSmart(smartName.trim())
@@ -323,6 +331,25 @@ export default function Toolbar({
           {filter.expandBursts ? '收起连拍' : '展开连拍'}
         </button>
 
+        <button
+          className={`btn h-7 px-2 text-[11.5px] ${
+            filter.colorFamily ? 'border-[var(--accent-border)] text-[var(--accent-2)]' : ''
+          }`}
+          onClick={() => setColorOpen((open) => !open)}
+          aria-expanded={colorOpen}
+          title="按照片画面的主色筛图，点开选一个色块"
+        >
+          <span
+            className="w-[10px] h-[10px] rounded-full shrink-0"
+            style={{
+              background: activeColor?.hex ?? 'var(--panel-3)',
+              boxShadow: '0 0 0 1px rgba(255,255,255,0.18)'
+            }}
+          />
+          主色
+          {colorOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+
         {filter.dir && (
           <button
             className="btn h-7 px-2 text-[11.5px] max-w-[260px]"
@@ -369,6 +396,7 @@ export default function Toolbar({
                 dir: null,
                 tagIds: [],
                 facets: {},
+                colorFamily: null,
                 orientation: null,
                 minRating: 0,
                 minAiScore: 0,
@@ -417,6 +445,45 @@ export default function Toolbar({
           )}
         </div>
       </div>
+
+      {filtersOpen && colorOpen && (
+        <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10.5px] text-[var(--faint)]">按照片画面的主色筛图：</span>
+            <button
+              className={`h-[24px] px-2 rounded-md border text-[11px] transition-colors ${
+                filter.colorFamily
+                  ? 'border-[var(--border)] bg-[var(--panel)] text-[var(--faint)]'
+                  : 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text)]'
+              }`}
+              onClick={() => patch({ colorFamily: null })}
+            >
+              不限
+            </button>
+            {COLOR_OPTIONS.map((option) => {
+              const active = filter.colorFamily === option.value
+              return (
+                <button
+                  key={option.value}
+                  title={option.label}
+                  aria-pressed={active}
+                  onClick={() => patch({ colorFamily: active ? null : option.value })}
+                  className="w-[16px] h-[16px] rounded-full transition-transform hover:scale-110"
+                  style={{
+                    background: option.hex,
+                    boxShadow: active
+                      ? '0 0 0 2px var(--panel-2), 0 0 0 3.5px var(--accent)'
+                      : '0 0 0 1px rgba(255,255,255,0.14)'
+                  }}
+                />
+              )
+            })}
+          </div>
+          <div className="mt-1.5 text-[10.5px] leading-4 text-[var(--faint)]">
+            主色是导入照片时从画面里提取的。点一个色块，只留下以这个色系为主的照片；再点同一个色块或「不限」就取消。这个条件也会一起存进智能文件夹。
+          </div>
+        </div>
+      )}
 
       {selectedIds.length > 0 && (
         <div className="flex items-center gap-2 mt-2 rounded-lg border border-[var(--accent-border)] bg-[var(--accent-soft)] px-2.5 py-1.5">

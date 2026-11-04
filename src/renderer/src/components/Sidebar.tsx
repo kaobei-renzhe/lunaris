@@ -259,6 +259,7 @@ export default function Sidebar({
           .sort(([a], [b]) => a.localeCompare(b))
       ),
       orientation: value.orientation ?? null,
+      colorFamily: value.colorFamily ?? null,
       minRating: value.minRating ?? 0,
       flag: value.flag ?? 0,
       pickAction: value.pickAction ?? null,

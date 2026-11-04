@@ -1132,6 +1132,7 @@ export default function App() {
     filter.dir ?? '',
     filter.errors ? 'errors' : '',
     (filter.tagIds ?? []).join(','),
+    filter.colorFamily ?? '',
     filter.orientation ?? '',
     filter.minRating ?? 0,
     filter.flag ?? 0,
@@ -1338,6 +1339,7 @@ export default function App() {
               Boolean(filter.dir) ||
               Boolean(filter.errors) ||
               (filter.tagIds?.length ?? 0) > 0 ||
+              Boolean(filter.colorFamily) ||
               Boolean(filter.orientation) ||
               Boolean(filter.flag) ||
               Boolean(filter.missing) ||
