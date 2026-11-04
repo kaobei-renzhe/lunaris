@@ -1,4 +1,3 @@
-import type { ColorFamily } from '@shared/types'
 import type { ThumbQuality } from '@shared/thumbs'
 
 export function formatBytes(bytes: number): string {
@@ -28,20 +27,6 @@ export function thumbUrl(id: number, quality: ThumbQuality = 'mid'): string {
 export function photoUrl(id: number): string {
   return `photo://item/${id}`
 }
-
-export const COLOR_OPTIONS: Array<{ value: ColorFamily; label: string; hex: string }> = [
-  { value: 'black', label: '黑', hex: '#1a1c21' },
-  { value: 'gray', label: '灰', hex: '#8b93a3' },
-  { value: 'white', label: '白', hex: '#e8ecf3' },
-  { value: 'red', label: '红', hex: '#e5534b' },
-  { value: 'orange', label: '橙', hex: '#e8873a' },
-  { value: 'yellow', label: '黄', hex: '#dfc04a' },
-  { value: 'green', label: '绿', hex: '#57a773' },
-  { value: 'cyan', label: '青', hex: '#4bb8c9' },
-  { value: 'blue', label: '蓝', hex: '#4f7fd4' },
-  { value: 'purple', label: '紫', hex: '#8a6bd1' },
-  { value: 'pink', label: '粉', hex: '#d96b9c' }
-]
 
 export function folderName(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean)

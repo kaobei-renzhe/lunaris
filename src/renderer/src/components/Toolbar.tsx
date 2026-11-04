@@ -18,7 +18,6 @@ import {
 } from 'lucide-react'
 import type { ClipStatus, FilterState, Folder } from '@shared/types'
 import { FLAG_FILTER_NOT_PICKED, FLAG_FILTER_NOT_REJECTED } from '@shared/types'
-import { COLOR_OPTIONS } from '../lib/format'
 
 interface ToolbarProps {
   filter: FilterState
@@ -109,7 +108,6 @@ export default function Toolbar({
     Boolean(filter.errors) ||
     (filter.tagIds?.length ?? 0) > 0 ||
     facetCount > 0 ||
-    Boolean(filter.colorFamily) ||
     Boolean(filter.orientation) ||
     Boolean(filter.flag) ||
     Boolean(filter.missing) ||
@@ -125,7 +123,6 @@ export default function Toolbar({
     filter.folderId,
     filter.dir,
     filter.errors,
-    filter.colorFamily,
     filter.orientation,
     filter.flag,
     filter.expandBursts,
@@ -206,7 +203,7 @@ export default function Toolbar({
           <option value="added">最新导入</option>
           <option value="mtime">拍摄时间</option>
           <option value="name">名称</option>
-          <option value="rating">评分</option>
+          <option value="rating">星级</option>
           <option value="size">文件大小</option>
           {aiReady && canScore && <option value="ai">AI 评分</option>}
         </select>
@@ -243,7 +240,7 @@ export default function Toolbar({
           value={filter.minRating ?? 0}
           onChange={(e) => patch({ minRating: Number(e.target.value) })}
         >
-          <option value={0}>全部评分</option>
+          <option value={0}>全部星级</option>
           <option value={1}>1 星以上</option>
           <option value={2}>2 星以上</option>
           <option value={3}>3 星以上</option>
@@ -326,26 +323,6 @@ export default function Toolbar({
           {filter.expandBursts ? '收起连拍' : '展开连拍'}
         </button>
 
-        <div className="flex items-center gap-1.5 pl-1">
-          {COLOR_OPTIONS.map((c) => {
-            const active = filter.colorFamily === c.value
-            return (
-              <button
-                key={c.value}
-                title={c.label}
-                onClick={() => patch({ colorFamily: active ? null : c.value })}
-                className="w-[16px] h-[16px] rounded-full transition-transform hover:scale-110"
-                style={{
-                  background: c.hex,
-                  boxShadow: active
-                    ? '0 0 0 2px var(--panel), 0 0 0 3.5px var(--accent)'
-                    : '0 0 0 1px rgba(255,255,255,0.14)'
-                }}
-              />
-            )
-          })}
-        </div>
-
         {filter.dir && (
           <button
             className="btn h-7 px-2 text-[11.5px] max-w-[260px]"
@@ -392,7 +369,6 @@ export default function Toolbar({
                 dir: null,
                 tagIds: [],
                 facets: {},
-                colorFamily: null,
                 orientation: null,
                 minRating: 0,
                 minAiScore: 0,

@@ -258,7 +258,6 @@ export default function Sidebar({
           .map(([key, list]) => [key, [...list].sort((a, b) => a - b)] as const)
           .sort(([a], [b]) => a.localeCompare(b))
       ),
-      colorFamily: value.colorFamily ?? null,
       orientation: value.orientation ?? null,
       minRating: value.minRating ?? 0,
       flag: value.flag ?? 0,

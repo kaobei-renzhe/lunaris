@@ -54,19 +54,6 @@ export interface Folder {
   count: number
 }
 
-export type ColorFamily =
-  | 'black'
-  | 'gray'
-  | 'white'
-  | 'red'
-  | 'orange'
-  | 'yellow'
-  | 'green'
-  | 'cyan'
-  | 'blue'
-  | 'purple'
-  | 'pink'
-
 export type Orientation = 'landscape' | 'portrait' | 'square'
 
 /**
@@ -85,7 +72,6 @@ export interface FilterState {
   /** 按源目录筛选（含子目录） */
   dir?: string | null
   minRating?: number
-  colorFamily?: ColorFamily | null
   orientation?: Orientation | null
   flag?: number
   /** 人像维度：facetId → 选中的 tagId 列表（同维度 OR，跨维度 AND） */
