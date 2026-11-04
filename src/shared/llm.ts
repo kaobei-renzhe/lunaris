@@ -82,7 +82,12 @@ export type LlmRunOutcome<T = unknown> =
   | { ok: true; data: T }
   | { ok: false; code: LlmErrorCode; message: string }
 
-export const LLM_CAPABILITY_IDS = ['photo.quality', 'photo.advice', 'photo.smartFilter'] as const
+export const LLM_CAPABILITY_IDS = [
+  'photo.quality',
+  'photo.advice',
+  'photo.smartFilter',
+  'photo.socratic'
+] as const
 export type LlmCapabilityId = (typeof LLM_CAPABILITY_IDS)[number]
 /** 每个能力独立开关：关掉后入口消失，直接调用也会被拒绝 */
 export type LlmCapabilitySwitch = Record<LlmCapabilityId, boolean>
@@ -90,7 +95,8 @@ export type LlmCapabilitySwitch = Record<LlmCapabilityId, boolean>
 export const LLM_CAPABILITY_DEFAULTS: LlmCapabilitySwitch = {
   'photo.quality': true,
   'photo.advice': true,
-  'photo.smartFilter': true
+  'photo.smartFilter': true,
+  'photo.socratic': true
 }
 
 /** 照片质量评分：构图/曝光/色彩/清晰度 + 总分，0-100 */

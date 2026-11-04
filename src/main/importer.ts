@@ -27,6 +27,8 @@ import {
 import { extractEmbeddedPreview } from './raw'
 import { regroup } from './grouping'
 import { log } from './logger'
+import { getXmpSettings } from './settings'
+import { importSidecarForItem } from './xmp'
 import { HEIF_EXT, RAW_EXT } from '../shared/formats'
 import { classifyColor, formatExposure, isSupportedFile, rgbToHex, shouldSkipDir } from './importerRules'
 import { THUMB_SIZES, THUMB_WEBP_QUALITY, type ThumbQuality } from '../shared/thumbs'
@@ -541,6 +543,9 @@ export async function importPaths(
   if (state.running) throw new Error('已有导入任务正在进行，请等它结束')
 
   const settings: ImportOptions = { ...DEFAULT_IMPORT_OPTIONS, ...options }
+  // 开关只在导入开始时读一次，避免每张照片都翻配置
+  const readXmp = getXmpSettings().enabled
+
   const db = getDb()
 
   state.running = true
@@ -718,6 +723,17 @@ export async function importPaths(
           else runImported.set(size, [filePath])
 
           await processItem(id, filePath)
+          if (readXmp) {
+            try {
+              await importSidecarForItem(id, filePath)
+            } catch (error) {
+              // 侧车坏了不影响导入本身
+              void log.warn('xmp', '导入时读取侧车失败', {
+                path: filePath,
+                error: (error as Error).message
+              })
+            }
+          }
           added++
         } catch (error) {
           failed++

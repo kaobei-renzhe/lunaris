@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   Folder,
   FolderPlus,
+  History,
   Images,
   Layers,
   Plus,
@@ -20,6 +21,7 @@ import {
   Tag as TagIcon,
   TriangleAlert,
   Upload,
+  UserCheck,
   X
 } from 'lucide-react'
 import type {
@@ -32,7 +34,7 @@ import type {
   Stats,
   Tag
 } from '@shared/types'
-import { folderName } from '../lib/format'
+import { folderName, samePath } from '../lib/format'
 import Logo from './Logo'
 
 interface DirRowsProps {
@@ -93,6 +95,8 @@ function DirRows({ nodes, depth, current, expanded, onToggle, onPick }: DirRowsP
 
 interface SidebarProps {
   library: string
+  /** 图库的显示名（可在启动页重命名） */
+  libraryName: string
   stats: Stats
   tags: Tag[]
   /** 人像维度：作为统一多级筛选树的父节点，取值挂在它下面 */
@@ -118,6 +122,8 @@ interface SidebarProps {
   onIndexClip: () => void
   onAutoTag: () => void
   onRelocate: () => void
+  /** 打开选片会话历史 */
+  onPickHistory: () => void
   lastRelocateDir: string | null
   onEquipment: () => void
   onSettings: () => void
@@ -132,6 +138,7 @@ interface SidebarProps {
 
 export default function Sidebar({
   library,
+  libraryName,
   stats,
   tags,
   facets,
@@ -155,6 +162,7 @@ export default function Sidebar({
   onIndexClip,
   onAutoTag,
   onRelocate,
+  onPickHistory,
   lastRelocateDir,
   onEquipment,
   onSettings,
@@ -234,7 +242,8 @@ export default function Sidebar({
     !hasFacetFilter &&
     !filter.missing &&
     !filter.dir &&
-    !filter.errors
+    !filter.errors &&
+    !filter.pickAction
 
   /** 只比较筛选条件本身（忽略排序），用来判断哪个智能文件夹正生效 */
   const filterKey = (value: FilterState | SmartFolder['filter']): string =>
@@ -253,6 +262,8 @@ export default function Sidebar({
       orientation: value.orientation ?? null,
       minRating: value.minRating ?? 0,
       flag: value.flag ?? 0,
+      pickAction: value.pickAction ?? null,
+      pickSessionId: value.pickSessionId ?? null,
       missing: Boolean(value.missing),
       errors: Boolean(value.errors)
     })
@@ -502,8 +513,9 @@ export default function Sidebar({
             <ArrowLeftRight size={13} />
           </button>
         </div>
-        <div className="mt-1.5 text-[11px] text-[var(--faint)] truncate" title={library}>
-          {folderName(library)}
+        <div className="mt-1.5 truncate text-[11px] text-[var(--faint)]" title={library}>
+          {libraryName}
+          {filter.dir && !samePath(filter.dir, library) ? ` › ${folderName(filter.dir)}` : ''}
         </div>
       </div>
 
@@ -524,6 +536,29 @@ export default function Sidebar({
         >
           <Camera size={14} />
           人像工作台
+        </div>
+
+        {stats.clientPicked > 0 && (
+          <div
+            className={`side-item ${filter.pickAction ? 'active' : ''}`}
+            onClick={() =>
+              onFilter({ sort: filter.sort, pickAction: filter.pickAction ? undefined : 'any' })
+            }
+            title="最近一单客户「要的 + 要修的」照片"
+          >
+            <UserCheck size={14} />
+            客户已选
+            <span className="count">{stats.clientPicked}</span>
+          </div>
+        )}
+
+        <div
+          className="side-item"
+          onClick={onPickHistory}
+          title="回看每一单的客户选择，也能重新导入回传结果"
+        >
+          <History size={14} />
+          选片记录
         </div>
 
         {stats.missing > 0 && (

@@ -45,6 +45,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "bench": "node scripts/bench.mjs",
+    "bench:clip": "node scripts/bench-clip.mjs",
     "dist": "electron-vite build && electron-builder --win --publish never && node scripts/clean-release.mjs"
   },
   "dependencies": {

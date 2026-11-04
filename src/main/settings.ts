@@ -1,7 +1,18 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
-import type { AutoTagSettings, EmbeddingModelId, ImportOptions, ThemeMode } from '../shared/types'
+import type {
+  AutoTagSettings,
+  EmbeddingModelId,
+  FinalsDefaults,
+  ImportOptions,
+  LibraryEntry,
+  PickDefaults,
+  PickWatermarkStyle,
+  ThemeMode,
+  XmpSettings
+} from '../shared/types'
+import { PICK_WATERMARK_DEFAULT, normalizePickWatermark } from '../shared/pick'
 import type { LayoutSizes } from '../shared/layout'
 import { normalizeLayout } from '../shared/layout'
 import type { ThumbQualityPref } from '../shared/thumbs'
@@ -21,6 +32,8 @@ export interface AppConfig {
   library?: string
   /** 图库路径 → 索引目录（library.db / thumbnails / previews）；没有记录就放在图库目录里 */
   libraryIndex?: Record<string, string>
+  /** 多图库清单；老配置没有这个字段，启动时由 library 迁移一次 */
+  libraries?: LibraryEntry[]
   autoBackup?: Partial<AutoBackupSettings>
   autoTag?: Partial<AutoTagSettings> & {
     /** 每个模型各自记一份阈值；老配置只有 threshold，按 Chinese-CLIP 处理 */
@@ -42,6 +55,25 @@ export interface AppConfig {
   /** AI 评分的最低星级：0 = 全部；>0 时只评 rating >= N，未标星（0 星）不参与 */
   aiScoreMinRating?: number
   llm?: Partial<LlmConfig>
+  /** 客户选片：记住上次的输出目录、客户名与水印模板 */
+  pick?: {
+    lastDir?: string
+    lastClient?: string
+    watermark?: Partial<PickWatermarkStyle>
+  }
+  /** 导出成品：记住上次的目录与参数，第二次导出不用重填 */
+  finals?: {
+    lastDir?: string
+    mode?: string
+    maxEdge?: number | null
+    quality?: number
+    naming?: string
+    prefix?: string
+    watermark?: string
+    watermarkStyle?: Partial<PickWatermarkStyle>
+  }
+  /** XMP 侧车：默认关闭，只写人的判断 */
+  xmp?: Partial<XmpSettings>
 }
 
 const DEFAULTS: AutoBackupSettings = {
@@ -221,4 +253,94 @@ export function saveAiScoreMinRating(value: number): number {
   const next = rounded >= 1 && rounded <= 5 ? rounded : 0
   updateConfig({ aiScoreMinRating: next })
   return next
+}
+
+/** 客户选片：上次的输出目录 + 客户名 + 水印模板，下次导出直接沿用 */
+export function getPickDefaults(): PickDefaults {
+  const stored = readConfig().pick ?? {}
+  return {
+    lastDir: typeof stored.lastDir === 'string' && stored.lastDir ? stored.lastDir : null,
+    lastClient: typeof stored.lastClient === 'string' ? stored.lastClient : '',
+    watermarkStyle: normalizePickWatermark(stored.watermark ?? PICK_WATERMARK_DEFAULT)
+  }
+}
+
+export function savePickDefaults(patch: Partial<PickDefaults>): PickDefaults {
+  const current = getPickDefaults()
+  const next: PickDefaults = {
+    ...current,
+    ...patch,
+    watermarkStyle: normalizePickWatermark(patch.watermarkStyle ?? current.watermarkStyle)
+  }
+  updateConfig({
+    pick: {
+      lastDir: next.lastDir ?? undefined,
+      lastClient: next.lastClient,
+      watermark: next.watermarkStyle
+    }
+  })
+  return next
+}
+
+/** 长边只接受 256–8192 的整数，其余当「不缩放」 */
+function normalizeMaxEdge(value: unknown): number | null {
+  const n = Math.round(Number(value))
+  return Number.isFinite(n) && n >= 256 && n <= 8192 ? n : null
+}
+
+export function getFinalsDefaults(): FinalsDefaults {
+  const stored = readConfig().finals ?? {}
+  const quality = Number(stored.quality)
+  return {
+    lastDir: typeof stored.lastDir === 'string' && stored.lastDir ? stored.lastDir : null,
+    mode: stored.mode === 'copy' ? 'copy' : 'jpeg',
+    maxEdge:
+      stored.maxEdge === null || stored.maxEdge === undefined ? null : normalizeMaxEdge(stored.maxEdge),
+    quality: Number.isFinite(quality) ? Math.min(95, Math.max(60, Math.round(quality))) : 90,
+    naming: stored.naming === 'prefix' ? 'prefix' : 'original',
+    prefix: typeof stored.prefix === 'string' ? stored.prefix : '',
+    watermark: typeof stored.watermark === 'string' ? stored.watermark : '',
+    watermarkStyle: normalizePickWatermark(stored.watermarkStyle ?? PICK_WATERMARK_DEFAULT)
+  }
+}
+
+export function saveFinalsDefaults(patch: Partial<FinalsDefaults>): FinalsDefaults {
+  const current = getFinalsDefaults()
+  const next: FinalsDefaults = {
+    ...current,
+    ...patch,
+    watermarkStyle: normalizePickWatermark(patch.watermarkStyle ?? current.watermarkStyle)
+  }
+  updateConfig({
+    finals: {
+      lastDir: next.lastDir ?? undefined,
+      mode: next.mode,
+      maxEdge: next.maxEdge,
+      quality: next.quality,
+      naming: next.naming,
+      prefix: next.prefix,
+      watermark: next.watermark,
+      watermarkStyle: next.watermarkStyle
+    }
+  })
+  return next
+}
+
+/** XMP 侧车：默认关闭，避免在用户没同意的情况下往照片目录写文件 */
+export function getXmpSettings(): XmpSettings {
+  const stored = readConfig().xmp ?? {}
+  return {
+    enabled: stored.enabled === true,
+    ignoreExternal: stored.ignoreExternal === true
+  }
+}
+
+export function saveXmpSettings(patch: Partial<XmpSettings>): XmpSettings {
+  const next = { ...getXmpSettings(), ...patch }
+  const settings: XmpSettings = {
+    enabled: next.enabled === true,
+    ignoreExternal: next.ignoreExternal === true
+  }
+  updateConfig({ xmp: settings })
+  return settings
 }

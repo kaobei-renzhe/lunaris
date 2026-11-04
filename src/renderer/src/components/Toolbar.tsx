@@ -2,6 +2,9 @@ import { useState } from 'react'
 import {
   ChevronDown,
   ChevronUp,
+  ClipboardPaste,
+  Download,
+  FileImage,
   Folder as FolderIcon,
   FolderPlus,
   Layers,
@@ -49,6 +52,12 @@ interface ToolbarProps {
   onClearMissing: () => void
   onClearSelection: () => void
   onSaveSmart: (name: string) => void
+  /** 客户选片：把选中的照片导出成客户能直接点开的网页 */
+  onExportPick: () => void
+  /** 导出成品：按尺寸/质量转 JPEG 或原样复制到文件夹 */
+  onExportFinals: () => void
+  /** 客户选片：粘贴客户回传的文字 */
+  onImportPick: () => void
 }
 
 export default function Toolbar({
@@ -78,7 +87,10 @@ export default function Toolbar({
   onDeleteSelected,
   onClearMissing,
   onClearSelection,
-  onSaveSmart
+  onSaveSmart,
+  onExportPick,
+  onExportFinals,
+  onImportPick
 }: ToolbarProps) {
   const [saving, setSaving] = useState(false)
   const [smartName, setSmartName] = useState('')
@@ -104,6 +116,7 @@ export default function Toolbar({
     (filter.minRating ?? 0) > 0 ||
     (filter.minAiScore ?? 0) > 0 ||
     Boolean(filter.unscored) ||
+    Boolean(filter.pickAction) ||
     (filter.onlyIds?.length ?? 0) > 0
 
   /** 折叠后用它提示还有几个条件在生效 */
@@ -120,6 +133,7 @@ export default function Toolbar({
     (filter.minRating ?? 0) > 0,
     (filter.minAiScore ?? 0) > 0,
     filter.unscored,
+    filter.pickAction,
     (filter.onlyIds?.length ?? 0) > 0,
     (filter.tagIds?.length ?? 0) > 0,
     facetCount > 0
@@ -198,6 +212,13 @@ export default function Toolbar({
         </select>
 
         <div className="ml-auto flex items-center gap-2">
+          <button
+            className="btn btn-ghost h-8 px-2.5"
+            onClick={onImportPick}
+            title="粘贴客户回传的选片文字，自动按编号打标"
+          >
+            <ClipboardPaste size={13} /> 导入选片结果
+          </button>
           <span className="text-[11.5px] text-[var(--muted)] tabular-nums">
             {loading ? '加载中…' : `${total} 张`}
           </span>
@@ -479,6 +500,20 @@ export default function Toolbar({
             </button>
           </div>
           <div className="ml-auto flex items-center gap-1">
+            <button
+              className="btn btn-ghost h-6 px-2 text-[11.5px]"
+              onClick={onExportPick}
+              title="把选中的照片生成一个客户能直接点开的选片页"
+            >
+              <FileImage size={12} /> 生成选片页
+            </button>
+            <button
+              className="btn btn-ghost h-6 px-2 text-[11.5px]"
+              onClick={onExportFinals}
+              title="按尺寸/质量导出 JPEG，或原样复制原件到文件夹"
+            >
+              <Download size={12} /> 导出成品
+            </button>
             {aiReady && canScore && (
               <button
                 className="btn btn-ghost h-6 px-2 text-[11.5px]"

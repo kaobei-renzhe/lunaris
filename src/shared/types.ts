@@ -101,6 +101,10 @@ export interface FilterState {
   unscored?: boolean
   /** 只保留这些 id（AI 智能筛选的结果），空数组等于不限制 */
   onlyIds?: number[]
+  /** 客户选片：只看客户「要的」「要修的」或两者都看（默认最近一次已回传结果的会话） */
+  pickAction?: 'keep' | 'fix' | 'any'
+  /** 指定选片会话；不填表示最近一次已回传结果的会话 */
+  pickSessionId?: number
   sort?: 'added' | 'name' | 'mtime' | 'rating' | 'size' | 'ai'
 }
 
@@ -264,6 +268,8 @@ export interface Item {
   folderIds: number[]
   /** 大模型评分，没评过为 null */
   quality: ItemQuality | null
+  /** 1 = 参考片（默认走研读），0 = 自己的片子（默认走复盘） */
+  reference: number
 }
 
 /** 索引（library.db / 缩略图 / 预览）当前存放位置 */
@@ -290,6 +296,182 @@ export interface SmartFolder {
   filter: FilterState
 }
 
+/* ─────────────── 客户选片 ─────────────── */
+
+/** 客户对单张照片的选择；null 表示还没回传 */
+export type PickAction = 'keep' | 'fix' | 'reject'
+
+/** 水印在画面里的位置，直接对应 sharp 的 gravity */
+export type PickWatermarkPosition =
+  | 'southeast'
+  | 'southwest'
+  | 'northeast'
+  | 'northwest'
+  | 'center'
+
+export interface PickWatermarkStyle {
+  position: PickWatermarkPosition
+  /** 0.15 - 1 */
+  opacity: number
+  /** logo 文件路径；null 表示只用水印文字 */
+  logo: string | null
+  /** logo 宽度占画面宽度的比例，0.08 - 0.35 */
+  logoScale: number
+  /** 字号占画面短边的比例，0.014 - 0.05 */
+  fontScale: number
+}
+
+export interface PickSession {
+  id: number
+  /** 8 位短码，文件名里带上，方便认出是哪一单 */
+  token: string
+  title: string
+  client: string
+  photoCount: number
+  watermark: string
+  createdAt: number
+  /** 导出时间 */
+  sentAt: number | null
+  /** 导入客户结果的时间 */
+  receivedAt: number | null
+  /** 导出的 HTML 路径，会话历史里用来打开所在文件夹 */
+  filePath: string | null
+  /** 客户在页面上写的备注 */
+  clientNote: string
+  /** 客户回传过几次（二次修改会累加） */
+  replyCount: number
+}
+
+export interface PickSessionSummary extends PickSession {
+  keep: number
+  fix: number
+  reject: number
+  pending: number
+}
+
+export interface PickSessionItem {
+  seq: number
+  itemId: number
+  name: string
+  action: PickAction | null
+}
+
+export interface PickExportInput {
+  itemIds: number[]
+  title: string
+  client: string
+  watermark: string
+  /** 长边像素，800 / 1200 / 1600 */
+  maxEdge: number
+  watermarkStyle: PickWatermarkStyle
+}
+
+export interface PickExportFailure {
+  id: number
+  name: string
+  message: string
+}
+
+export interface PickExportResult {
+  sessionId: number
+  token: string
+  path: string
+  bytes: number
+  count: number
+  /** 读不出来的照片，已跳过 */
+  failed: PickExportFailure[]
+}
+
+export interface PickExportProgress {
+  done: number
+  total: number
+  current: string
+}
+
+export interface PickReplyPreview {
+  keep: number[]
+  fix: number[]
+  /** 回复里出现、但这次会话没有的编号 */
+  unmatched: number[]
+  /** 回复里明确写了「不要的：其余」，才把剩下的照片标成不要 */
+  rejectRest: boolean
+  /** 客户写的备注，没有就是空串 */
+  note: string
+  /** 这次会话一共多少张 */
+  total: number
+}
+
+export interface PickApplyResult {
+  keep: number
+  fix: number
+  reject: number
+  unmatched: number[]
+  /** 本次落库保存的客户备注 */
+  note: string
+  /** 这一单累计回传次数 */
+  replyCount: number
+}
+
+export interface PickDefaults {
+  lastDir: string | null
+  lastClient: string
+  watermarkStyle: PickWatermarkStyle
+}
+
+/* ─────────────── 导出成品 ─────────────── */
+
+/** jpeg = 缩放/转码成 JPEG（可烘水印）；copy = 原样复制原件 */
+export type FinalsExportMode = 'jpeg' | 'copy'
+/** original = 沿用原文件名；prefix = 前缀 + 三位序号 */
+export type FinalsNaming = 'original' | 'prefix'
+
+export interface FinalsExportInput {
+  itemIds: number[]
+  mode: FinalsExportMode
+  /** 长边像素；null 表示不缩放，仅 jpeg 模式有效 */
+  maxEdge: number | null
+  /** JPEG 质量 60-95 */
+  quality: number
+  naming: FinalsNaming
+  /** naming = prefix 时用，如「小林-街拍」 */
+  prefix: string
+  /** 水印文字；空串表示不加水印 */
+  watermark: string
+  watermarkStyle: PickWatermarkStyle
+}
+
+export interface FinalsExportFailure {
+  id: number
+  name: string
+  message: string
+}
+
+export interface FinalsExportResult {
+  dir: string
+  count: number
+  bytes: number
+  /** 因重名自动加序号的文件数 */
+  renamed: number
+  failed: FinalsExportFailure[]
+}
+
+export interface FinalsExportProgress {
+  done: number
+  total: number
+  current: string
+}
+
+export interface FinalsDefaults {
+  lastDir: string | null
+  mode: FinalsExportMode
+  maxEdge: number | null
+  quality: number
+  naming: FinalsNaming
+  prefix: string
+  watermark: string
+  watermarkStyle: PickWatermarkStyle
+}
+
 export interface Stats {
   total: number
   missing: number
@@ -298,6 +480,8 @@ export interface Stats {
   bytes: number
   /** 导入失败、等待处理的文件数 */
   errors: number
+  /** 最近一次已回传结果的选片会话里，客户「要的 + 要修的」张数 */
+  clientPicked: number
 }
 
 /** 导入配置，会记住上次的选择 */
@@ -383,6 +567,74 @@ export interface LastLibraryResult {
   indexMissing?: string
 }
 
+/* ─────────────── 多图库 ─────────────── */
+
+export interface LibraryEntry {
+  /** UUID，存在 library.db 的 meta 表里；目录改名/移动后仍能认回同一个库 */
+  id: string
+  path: string
+  name: string
+  lastOpened: number
+  /** 上次打开时的张数，用于卡片展示；打开时刷新 */
+  itemCount: number
+}
+
+/** ok = 正常；missing = 目录不在；index-missing = 目录在但 library.db 不在 */
+export type LibraryStatus = 'ok' | 'missing' | 'index-missing'
+
+export interface LibrarySummary extends LibraryEntry {
+  status: LibraryStatus
+}
+
+export interface LibraryRelocateResult {
+  ok: boolean
+  /** 用户取消了目录选择 */
+  cancelled?: boolean
+  message?: string
+  entry?: LibrarySummary
+}
+
+/* ─────────────── XMP 侧车 ─────────────── */
+
+export interface XmpSettings {
+  /** 总开关，默认关闭；开了才随改动写侧车 */
+  enabled: boolean
+  /** 外部软件改过时不再提示 */
+  ignoreExternal: boolean
+}
+
+export interface XmpProgress {
+  phase: 'write' | 'scan'
+  done: number
+  total: number
+  current: string
+}
+
+export interface XmpExportResult {
+  written: number
+  skipped: number
+  failed: number
+}
+
+export interface XmpConflictItem {
+  itemId: number
+  name: string
+  sidecar: string
+  /** 侧车文件当前的 mtime */
+  mtime: number
+}
+
+export interface XmpCheckResult {
+  scanned: number
+  conflicts: XmpConflictItem[]
+  ignored: boolean
+}
+
+export interface XmpImportResult {
+  imported: number
+  failed: number
+}
+
 export interface Api {
   pickLibraryDir: () => Promise<string | null>
   createLibrary: (dir: string) => Promise<string>
@@ -390,6 +642,23 @@ export interface Api {
   lastLibrary: () => Promise<LastLibraryResult>
   /** 索引（library.db / 缩略图 / 预览）当前放在哪 */
   getLibraryStorage: () => Promise<LibraryStorage | null>
+  /** 图库清单（带探活状态） */
+  listLibraries: () => Promise<LibrarySummary[]>
+  renameLibrary: (id: string, name: string) => Promise<void>
+  /** 从清单移除；alsoDeleteData=true 时连索引数据一起删（原图不动） */
+  forgetLibrary: (id: string, alsoDeleteData: boolean) => Promise<void>
+  /** 选目录重新定位一个库；目录里的 library_id 必须对得上 */
+  relocateLibrary: (id: string) => Promise<LibraryRelocateResult>
+  /** XMP 侧车：默认关闭，只写人的判断 */
+  getXmpSettings: () => Promise<XmpSettings>
+  saveXmpSettings: (patch: Partial<XmpSettings>) => Promise<XmpSettings>
+  /** 手动全量写 XMP（迁移/备份用），会发进度事件 */
+  xmpExportAll: () => Promise<XmpExportResult>
+  /** 检查哪些侧车在外部被改过 */
+  xmpCheckConflicts: () => Promise<XmpCheckResult>
+  /** 把指定照片的外部修改导入回来 */
+  xmpImportConflicts: (itemIds: number[]) => Promise<XmpImportResult>
+  onXmpProgress: (cb: (progress: XmpProgress) => void) => () => void
   /** 左栏 / 右栏宽度（记住用户拖过的值） */
   getLayout: () => Promise<LayoutSizes>
   saveLayout: (patch: Partial<LayoutSizes>) => Promise<LayoutSizes>
@@ -440,6 +709,8 @@ export interface Api {
   /** 调整标签层级：parentId 为 null 时移回顶层 */
   setTagParent: (id: number, parentId: number | null) => Promise<void>
   setTag: (itemIds: number[], tagId: number, add: boolean) => Promise<void>
+  /** 照片研读笔记 */
+  notes: NotesApi
   listFolders: () => Promise<Folder[]>
   createFolder: (name: string) => Promise<Folder>
   deleteFolder: (id: number) => Promise<void>
@@ -448,6 +719,26 @@ export interface Api {
   listSmart: () => Promise<SmartFolder[]>
   saveSmart: (name: string, filter: FilterState) => Promise<SmartFolder>
   deleteSmart: (id: number) => Promise<void>
+  /** 客户选片：上次的输出目录与客户名 */
+  pickDefaults: () => Promise<PickDefaults>
+  /** 生成自包含选片页；用户取消保存时返回 null */
+  pickExport: (input: PickExportInput) => Promise<PickExportResult | null>
+  listPickSessions: () => Promise<PickSessionSummary[]>
+  /** 删除一单选片记录（只删记录，不动照片） */
+  deletePickSession: (sessionId: number) => Promise<void>
+  /** 某一单的序号 ↔ 照片明细 */
+  listPickSessionItems: (sessionId: number) => Promise<PickSessionItem[]>
+  /** 选一个 logo 文件，返回路径；取消返回 null */
+  pickPickLogo: () => Promise<string | null>
+  /** 解析客户回传的文本，先预览再落库 */
+  pickReplyPreview: (sessionId: number, text: string) => Promise<PickReplyPreview>
+  pickApplyReply: (sessionId: number, preview: PickReplyPreview) => Promise<PickApplyResult>
+  onPickProgress: (cb: (progress: PickExportProgress) => void) => () => void
+  /** 导出成品：上次的目录与参数 */
+  finalsDefaults: () => Promise<FinalsDefaults>
+  /** 导出成品到用户选的文件夹；取消时返回 null */
+  finalsExport: (input: FinalsExportInput) => Promise<FinalsExportResult | null>
+  onFinalsProgress: (cb: (progress: FinalsExportProgress) => void) => () => void
   pickImages: () => Promise<string[]>
   pickFolder: () => Promise<string | null>
   importPaths: (paths: string[], options?: Partial<ImportOptions>) => Promise<ImportResult>
@@ -663,4 +954,89 @@ export interface AutoTagStatus {
   thresholdMin: number
   thresholdMax: number
   thresholdStep: number
+}
+
+/* ─────────────── 照片研读与复盘 ─────────────── */
+
+/** 研读（看别人的好片偷手法） / 复盘（看自己的片子找差距） */
+export type NoteMode = 'study' | 'review'
+
+/** question 提问 · answer 回答 · insight 提炼 · intent 当时的意图 · tech 五维拆解 */
+export type NoteKind = 'question' | 'answer' | 'insight' | 'intent' | 'tech'
+
+export type NoteAuthor = 'me' | 'ai'
+
+/** 归一化坐标（0-1），相对照片本身，缩放平移都不用换算 */
+export interface NoteRegion {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface PhotoNote {
+  id: number
+  itemId: number
+  parentId: number | null
+  kind: NoteKind
+  mode: NoteMode
+  body: string
+  region: NoteRegion | null
+  author: NoteAuthor
+  tags: string[]
+  createdAt: number
+}
+
+/** 一条线程 = 一个根笔记（可能带圈选）+ 它的全部追问 */
+export interface NoteThread {
+  root: PhotoNote
+  replies: PhotoNote[]
+}
+
+export interface CreateNoteInput {
+  itemId: number
+  parentId?: number | null
+  kind?: NoteKind
+  mode?: NoteMode
+  body: string
+  region?: NoteRegion | null
+  author?: NoteAuthor
+  tags?: string[]
+}
+
+/** 反问对话的一轮 */
+export interface SocraticTurn {
+  role: 'me' | 'ai'
+  text: string
+}
+
+export interface SocraticInput {
+  itemId: number
+  /** 圈选区域，null = 整图提问 */
+  region?: NoteRegion | null
+  question: string
+  /** 之前的对话（不含本轮），用于多轮上下文 */
+  history?: SocraticTurn[]
+  mode?: NoteMode
+  /** 用户点了「直接告诉我」，跳过反问直接给答案 */
+  skipSocratic?: boolean
+}
+
+export interface SocraticReply {
+  text: string
+  /** 本轮是反问还是解释，前端用来渲染不同气泡 */
+  stage: 'probe' | 'explain'
+}
+
+/** 照片研读笔记：渲染层只碰这一组接口 */
+export interface NotesApi {
+  list: (itemId: number) => Promise<NoteThread[]>
+  count: (itemId: number) => Promise<number>
+  create: (input: CreateNoteInput) => Promise<PhotoNote>
+  update: (
+    id: number,
+    patch: Partial<Pick<PhotoNote, 'body' | 'kind' | 'tags'>>
+  ) => Promise<PhotoNote | null>
+  remove: (id: number) => Promise<void>
+  setReference: (itemId: number, value: boolean) => Promise<void>
 }

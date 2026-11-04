@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { ArrowLeft, Camera, Folder as FolderIcon, Images, Plus, RefreshCw, Trash2, X } from 'lucide-react'
-import type { Facet, FacetValue, Folder, Item } from '@shared/types'
+import type { Facet, FacetValue, Folder, Item, Tag } from '@shared/types'
 import { photoUrl, thumbUrl } from './lib/format'
 import Lightbox from './components/Lightbox'
+import PhotoInspector from './components/inspector/PhotoInspector'
 
 interface PortraitWorkspaceProps {
   onBack: () => void
+  /** 大模型总开关与读片对话能力 */
+  aiReady: boolean
+  canAsk: boolean
 }
 
 const PAGE_LIMIT = 500
@@ -15,9 +19,10 @@ const PAGE_LIMIT = 500
  * 人像工作台：左维度 / 中瀑布流 / 右详情。
  * 维度与取值本质是带 facet_id 的普通标签，所以照片上已有的标记、筛选都能直接复用。
  */
-export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
+export default function PortraitWorkspace({ onBack, aiReady, canAsk }: PortraitWorkspaceProps) {
   const [facets, setFacets] = useState<Facet[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
   /** 文件夹与维度条件叠加：先用文件夹缩小范围，再按维度细筛 */
   const [folderId, setFolderId] = useState<number | null>(null)
   const [items, setItems] = useState<Item[]>([])
@@ -27,7 +32,6 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
   const [selection, setSelection] = useState<number[]>([])
   const [activeId, setActiveId] = useState<number | null>(null)
   const [lightIndex, setLightIndex] = useState<number | null>(null)
-  const [openPicker, setOpenPicker] = useState<string | null>(null)
   const [addingValueFor, setAddingValueFor] = useState<string | null>(null)
   const [valueDraft, setValueDraft] = useState('')
   const [creatingFacet, setCreatingFacet] = useState(false)
@@ -40,6 +44,10 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
 
   const loadFolders = useCallback(async () => {
     setFolders(await window.api.listFolders())
+  }, [])
+
+  const loadTags = useCallback(async () => {
+    setTags(await window.api.listTags())
   }, [])
 
   const loadItems = useCallback(async () => {
@@ -65,7 +73,8 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
 
   useEffect(() => {
     void loadFolders().catch((error) => setMessage(`读取文件夹失败：${(error as Error).message}`))
-  }, [loadFolders])
+    void loadTags().catch(() => undefined)
+  }, [loadFolders, loadTags])
 
   useEffect(() => {
     void loadItems()
@@ -474,105 +483,44 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
         </main>
 
         {/* 右：详情 */}
-        <aside className="w-[306px] shrink-0 border-l border-[var(--border)] overflow-y-auto px-3 py-3">
+        <aside className="flex w-[306px] min-h-0 shrink-0 flex-col border-l border-[var(--border)]">
           {!current ? (
-            <div className="text-[11.5px] text-[var(--faint)] leading-5">
+            <div className="p-3 text-[11.5px] leading-5 text-[var(--faint)]">
               点一张照片查看细节，Ctrl / Cmd 点可选多张。
               <br />
               选中后在下方按维度打标，多选时批量生效。
             </div>
           ) : (
-            <div className="space-y-3">
-              <div className="rounded-lg overflow-hidden border border-[var(--border)] bg-[var(--panel-2)]">
-                <img
-                  src={photoUrl(current.id)}
-                  alt={current.name}
-                  className="w-full max-h-[190px] object-contain bg-black/20"
-                  draggable={false}
+            <>
+              <div className="shrink-0 space-y-3 px-3 pt-3">
+                <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--panel-2)]">
+                  <img
+                    src={photoUrl(current.id)}
+                    alt={current.name}
+                    className="max-h-[190px] w-full object-contain bg-black/20"
+                    draggable={false}
+                  />
+                </div>
+                <div>
+                  <div className="truncate text-[12px] text-[var(--text)]">{current.name}</div>
+                  <div className="mt-0.5 text-[10.5px] tabular-nums text-[var(--faint)]">
+                    {current.width} × {current.height}
+                    {current.rating > 0 ? ` · ${'★'.repeat(current.rating)}` : ''}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-2 min-h-0 flex-1">
+                <PhotoInspector
+                  item={current}
+                  host="portrait"
+                  compact
+                  showPreview={false}
+                  facet={{ targetIds: targets, onApplyValue: applyValue }}
+                  study={{ aiReady, canAsk }}
                 />
               </div>
-              <div>
-                <div className="text-[12px] text-[var(--text)] truncate">{current.name}</div>
-                <div className="text-[10.5px] text-[var(--faint)] mt-0.5 tabular-nums">
-                  {current.width} × {current.height}
-                  {current.rating > 0 ? ` · ${'★'.repeat(current.rating)}` : ''}
-                </div>
-              </div>
-
-              {targets.length > 1 && (
-                <div className="text-[10.5px] text-[var(--accent-text)] leading-4">
-                  已选 {targets.length} 张，下面的操作会批量应用到这些照片。
-                </div>
-              )}
-
-              {facets.map((facet) => {
-                const assigned = assignedValues(facet, current)
-                const open = openPicker === facet.id
-                const remaining = facet.values.filter(
-                  (value) => !assigned.some((entry) => entry.id === value.id)
-                )
-                return (
-                  <div
-                    key={facet.id}
-                    className="rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-2.5 py-2"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10.5px] text-[var(--faint)]">{facet.name}</span>
-                      <span className="text-[9.5px] text-[var(--faint)] opacity-70">
-                        {facet.multi ? '多选' : '单选'}
-                      </span>
-                      <button
-                        className="ml-auto w-5 h-5 rounded grid place-items-center text-[var(--faint)] hover:text-[var(--text)] hover:bg-[var(--panel)]"
-                        onClick={() => setOpenPicker(open ? null : facet.id)}
-                        title="添加取值"
-                      >
-                        <Plus size={12} />
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {assigned.length === 0 && (
-                        <span className="text-[10.5px] text-[var(--faint)]">未标注</span>
-                      )}
-                      {assigned.map((value) => (
-                        <button
-                          key={value.id}
-                          className="inline-flex items-center gap-1 h-[21px] px-1.5 rounded-md border border-[var(--accent)] bg-[var(--accent-soft)] text-[10.5px]"
-                          onClick={() => void applyValue(facet, value, false)}
-                          title="点一下移除"
-                        >
-                          <span
-                            className="w-[5px] h-[5px] rounded-full"
-                            style={{ background: value.color }}
-                          />
-                          {value.name}
-                          <X size={9} />
-                        </button>
-                      ))}
-                    </div>
-                    {open && (
-                      <div className="flex flex-wrap gap-1 mt-1.5 pt-1.5 border-t border-[var(--border)]">
-                        {remaining.map((value) => (
-                          <button
-                            key={value.id}
-                            className="inline-flex items-center gap-1 h-[21px] px-1.5 rounded-md border border-[var(--border)] bg-[var(--panel)] text-[10.5px] text-[var(--faint)] hover:text-[var(--text)]"
-                            onClick={() => void applyValue(facet, value, true)}
-                          >
-                            <span
-                              className="w-[5px] h-[5px] rounded-full"
-                              style={{ background: value.color }}
-                            />
-                            {value.name}
-                          </button>
-                        ))}
-                        {remaining.length === 0 && (
-                          <span className="text-[10.5px] text-[var(--faint)]">这个维度没有更多取值</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            </>
           )}
         </aside>
       </div>
@@ -583,6 +531,16 @@ export default function PortraitWorkspace({ onBack }: PortraitWorkspaceProps) {
           index={lightIndex}
           onClose={() => setLightIndex(null)}
           onNavigate={setLightIndex}
+          tags={tags}
+          folders={folders}
+          onRefresh={() => {
+            void loadItems()
+            void loadFacets()
+            void loadTags()
+          }}
+          onPushUndo={() => undefined}
+          aiReady={aiReady}
+          canAsk={canAsk}
         />
       )}
     </div>

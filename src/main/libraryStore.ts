@@ -6,9 +6,9 @@ import { isImportRunning } from './importer'
 import { log } from './logger'
 import { libraryKey, setIndexDirFor } from './settings'
 
-/** 索引包含的东西：数据库本体、WAL/SHM，以及缩略图与预览缓存 */
+/** 索引包含的东西：数据库本体、WAL/SHM，以及缩略图、预览与语义向量快照 */
 const INDEX_FILES = ['library.db', 'library.db-wal', 'library.db-shm']
-const INDEX_DIRS = ['thumbnails', 'previews']
+const INDEX_DIRS = ['thumbnails', 'previews', 'vectors']
 
 export interface MoveIndexResult {
   /** 搬完之后索引所在目录 */

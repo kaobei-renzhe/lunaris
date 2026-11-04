@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { BrowserWindow, ClipboardItem, app, clipboard, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import sharp from 'sharp'
 import { getIndexPath, getLibraryPath, openLibrary, resolveIndexDir } from './db'
@@ -10,6 +10,7 @@ import {
   clearPendingImport,
   getPendingImport,
   importStatus,
+  isImportRunning,
   pauseImport,
   resumeImport
 } from './importer'
@@ -27,6 +28,9 @@ import {
   getTheme,
   getThumbCacheLimitMB,
   getThumbQuality,
+  getPickDefaults,
+  getFinalsDefaults,
+  getXmpSettings,
   libraryKey,
   readConfig,
   saveAutoBackup,
@@ -34,7 +38,10 @@ import {
   saveEmbeddingModel,
   saveImportOptions,
   saveLayout,
+  savePickDefaults,
+  saveFinalsDefaults,
   saveSkin,
+  saveXmpSettings,
   saveTheme,
   saveThumbCacheLimitMB,
   saveAiScoreMinRating,
@@ -64,6 +71,40 @@ import { startWatching, stopWatching } from './watcher'
 import { clearThumbCache, pruneHighCache, thumbCacheStats } from './thumbs'
 import { syncLibrary } from './sync'
 import { moveIndexTo } from './libraryStore'
+import {
+  forgetLibrary,
+  listLibraries,
+  relocateLibrary,
+  renameLibrary,
+  touchLibrary
+} from './libraries'
+import {
+  applyPickReply,
+  deletePickSession,
+  exportPickSession,
+  listPickSessionItems,
+  listPickSessions,
+  newPickToken,
+  previewPickReply
+} from './pick'
+import { exportFinals } from './finals'
+import { normalizePickWatermark } from '../shared/pick'
+import {
+  checkXmpConflicts,
+  exportAllXmp,
+  importXmpConflicts,
+  scheduleXmpForFacet,
+  scheduleXmpForTag,
+  scheduleXmpWrite
+} from './xmp'
+import {
+  countNotes,
+  createNote,
+  deleteNote,
+  listThreads,
+  setItemReference,
+  updateNote
+} from './notes'
 import {
   getStatus as getLlmStatus,
   removeApiKey,
@@ -117,10 +158,15 @@ import type {
   AppDialogOptions,
   AppDialogResult,
   AutoTagSettings,
+  CreateNoteInput,
   EmbeddingModelId,
   FilterState,
+  FinalsExportInput,
   GearSpec,
   ImportOptions,
+  NoteKind,
+  PickExportInput,
+  PickReplyPreview,
   RelocatePair,
   ScenarioId,
   ThemeMode,
@@ -141,6 +187,12 @@ const IMAGE_FILTERS = [
 
 function activeWindow(): BrowserWindow | null {
   return BrowserWindow.getAllWindows()[0] ?? null
+}
+
+/** 文件名里去掉 Windows 不认的字符，标题再长也截断 */
+function safeFileName(name: string): string {
+  const cleaned = name.replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim()
+  return (cleaned || '选片').slice(0, 60)
 }
 
 let dialogSeq = 1
@@ -214,6 +266,7 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('library:create', async (_e, dir: string) => {
+    if (isImportRunning()) throw new Error('正在导入图片，等导入结束后再切换图库')
     mkdirSync(dir, { recursive: true })
     // 新建的图库从零开始，索引就用这个文件夹，别沿用同路径下的旧映射
     setIndexDirFor(dir, null)
@@ -221,11 +274,13 @@ export function registerIpc(): void {
     regroup()
     invalidateClipCache()
     updateConfig({ library: dir })
+    touchLibrary(dir)
     restartWatcher()
     return dir
   })
 
   ipcMain.handle('library:open', async (_e, dir: string) => {
+    if (isImportRunning()) throw new Error('正在导入图片，等导入结束后再切换图库')
     if (!existsSync(dir)) throw new Error('图库目录不存在')
     // 用户主动打开一个带 library.db 的目录时，以目录内的索引为准
     if (existsSync(join(dir, 'library.db'))) setIndexDirFor(dir, null)
@@ -233,6 +288,7 @@ export function registerIpc(): void {
     regroup()
     invalidateClipCache()
     updateConfig({ library: dir })
+    touchLibrary(dir)
     restartWatcher()
     return dir
   })
@@ -255,6 +311,7 @@ export function registerIpc(): void {
     openLibrary(config.library)
     regroup()
     invalidateClipCache()
+    touchLibrary(config.library)
     restartWatcher()
     return { dir: config.library }
   })
@@ -286,6 +343,45 @@ export function registerIpc(): void {
 
   ipcMain.handle('library:index:move', (_e, target: string | null) => moveIndex(target ?? null))
 
+  ipcMain.handle('libraries:list', () => listLibraries())
+
+  ipcMain.handle('libraries:rename', (_e, id: string, name: string) =>
+    renameLibrary(String(id), String(name))
+  )
+
+  ipcMain.handle('libraries:forget', (_e, id: string, alsoDeleteData: boolean) =>
+    forgetLibrary(String(id), Boolean(alsoDeleteData))
+  )
+
+  ipcMain.handle('libraries:relocate', async (_e, id: string) => {
+    const picked = await dialog.showOpenDialog({
+      title: '选择这个图库现在所在的文件夹',
+      properties: ['openDirectory']
+    })
+    if (picked.canceled || !picked.filePaths[0]) return { ok: false, cancelled: true }
+    return relocateLibrary(String(id), picked.filePaths[0])
+  })
+
+  ipcMain.handle('xmp:settings:get', () => getXmpSettings())
+
+  ipcMain.handle('xmp:settings:save', (_e, patch: Partial<{ enabled: boolean; ignoreExternal: boolean }>) =>
+    saveXmpSettings(patch ?? {})
+  )
+
+  ipcMain.handle('xmp:exportAll', async () => {
+    const win = activeWindow()
+    return exportAllXmp((progress) => win?.webContents.send('xmp:progress', progress))
+  })
+
+  ipcMain.handle('xmp:check', async () => {
+    const win = activeWindow()
+    return checkXmpConflicts((progress) => win?.webContents.send('xmp:progress', progress))
+  })
+
+  ipcMain.handle('xmp:import', (_e, itemIds: number[]) =>
+    importXmpConflicts(Array.isArray(itemIds) ? itemIds : [])
+  )
+
   ipcMain.handle('items:list', (_e, filter: FilterState, offset?: number, limit?: number) =>
     listItems(filter ?? {}, offset ?? 0, limit ?? 200)
   )
@@ -294,6 +390,7 @@ export function registerIpc(): void {
     'items:update',
     (_e, id: number, patch: { rating?: number; note?: string; url?: string; flag?: number }) => {
       updateItem(id, patch)
+      scheduleXmpWrite([id])
     }
   )
   ipcMain.handle('items:delete', (_e, ids: number[]) => {
@@ -330,29 +427,61 @@ export function registerIpc(): void {
   ipcMain.handle('tags:create', (_e, name: string, color?: string, parentId?: number | null) =>
     createTag(name, color, parentId ?? null)
   )
-  ipcMain.handle('tags:delete', (_e, id: number) => deleteTag(id))
+  ipcMain.handle('tags:delete', (_e, id: number) => {
+    scheduleXmpForTag(id)
+    deleteTag(id)
+  })
   ipcMain.handle('tags:setParent', (_e, id: number, parentId: number | null) =>
     setTagParent(id, parentId)
   )
-  ipcMain.handle('tags:set', (_e, itemIds: number[], tagId: number, add: boolean) =>
+  ipcMain.handle('tags:set', (_e, itemIds: number[], tagId: number, add: boolean) => {
     setTag(itemIds, tagId, add)
+    scheduleXmpWrite(itemIds)
+  })
+
+  // 照片研读笔记
+  ipcMain.handle('notes:list', (_e, itemId: number) => listThreads(Number(itemId)))
+  ipcMain.handle('notes:count', (_e, itemId: number) => countNotes(Number(itemId)))
+  ipcMain.handle('notes:create', (_e, input: CreateNoteInput) =>
+    createNote(input ?? ({} as CreateNoteInput))
   )
+  ipcMain.handle(
+    'notes:update',
+    (_e, id: number, patch: Partial<{ body: string; kind: NoteKind; tags: string[] }>) =>
+      updateNote(Number(id), patch ?? {})
+  )
+  ipcMain.handle('notes:delete', (_e, id: number) => deleteNote(Number(id)))
+  ipcMain.handle('notes:setReference', (_e, itemId: number, value: boolean) => {
+    const id = Number(itemId)
+    setItemReference(id, Boolean(value))
+    // 参考片标记也是人的判断，同步进 XMP
+    scheduleXmpWrite([id])
+  })
 
   // 人像工作台：维度、取值与照片上的标记
   ipcMain.handle('facets:list', () => listFacets())
   ipcMain.handle('facets:create', (_e, name: string) => createFacet(name))
-  ipcMain.handle('facets:rename', (_e, id: string, name: string) => renameFacet(id, name))
-  ipcMain.handle('facets:delete', (_e, id: string) => deleteFacet(id))
+  ipcMain.handle('facets:rename', (_e, id: string, name: string) => {
+    scheduleXmpForFacet(id)
+    renameFacet(id, name)
+  })
+  ipcMain.handle('facets:delete', (_e, id: string) => {
+    scheduleXmpForFacet(id)
+    deleteFacet(id)
+  })
   ipcMain.handle('facets:createValue', (_e, facetId: string, name: string) =>
     createFacetValue(facetId, name)
   )
-  ipcMain.handle('facets:setItem', (_e, itemId: number, facetId: string, tagIds: number[]) =>
+  ipcMain.handle('facets:setItem', (_e, itemId: number, facetId: string, tagIds: number[]) => {
     setItemFacet(itemId, facetId, tagIds)
-  )
+    scheduleXmpWrite([itemId])
+  })
   ipcMain.handle(
     'facets:bulkSet',
-    (_e, itemIds: number[], facetId: string, tagId: number, add: boolean) =>
+    (_e, itemIds: number[], facetId: string, tagId: number, add: boolean) => {
       bulkSetFacetValue(itemIds, facetId, tagId, add)
+      scheduleXmpWrite(itemIds)
+    }
   )
 
   ipcMain.handle('folders:list', () => listFolders())
@@ -368,6 +497,123 @@ export function registerIpc(): void {
   ipcMain.handle('smart:list', () => listSmart())
   ipcMain.handle('smart:save', (_e, name: string, filter: FilterState) => saveSmart(name, filter))
   ipcMain.handle('smart:delete', (_e, id: number) => deleteSmart(id))
+
+  ipcMain.handle('pick:defaults', () => getPickDefaults())
+
+  ipcMain.handle('pick:export', async (_e, input: PickExportInput) => {
+    const raw = input ?? ({} as PickExportInput)
+    const request: PickExportInput = {
+      itemIds: Array.isArray(raw.itemIds) ? raw.itemIds : [],
+      title: String(raw.title ?? '').trim(),
+      client: String(raw.client ?? '').trim(),
+      watermark: String(raw.watermark ?? '').trim(),
+      maxEdge: Number(raw.maxEdge) || 1200,
+      watermarkStyle: normalizePickWatermark(raw.watermarkStyle)
+    }
+    if (request.itemIds.length === 0) throw new Error('没有选中照片')
+
+    const defaults = getPickDefaults()
+    const startDir =
+      defaults.lastDir && existsSync(defaults.lastDir) ? defaults.lastDir : app.getPath('documents')
+    const token = newPickToken()
+    const picked = await dialog.showSaveDialog({
+      title: '保存客户选片页',
+      defaultPath: join(startDir, `${safeFileName(request.title || '选片')}-${token}.html`),
+      filters: [{ name: '网页', extensions: ['html'] }]
+    })
+    if (picked.canceled || !picked.filePath) return null
+
+    const win = activeWindow()
+    const result = await exportPickSession(request, picked.filePath, (progress) => {
+      win?.webContents.send('pick:export-progress', progress)
+    })
+    savePickDefaults({
+      lastDir: dirname(picked.filePath),
+      lastClient: request.client,
+      watermarkStyle: request.watermarkStyle
+    })
+    return result
+  })
+
+  ipcMain.handle('pick:sessions', () => listPickSessions())
+
+  ipcMain.handle('pick:deleteSession', (_e, sessionId: number) => {
+    deletePickSession(Number(sessionId))
+  })
+
+  ipcMain.handle('pick:sessionItems', (_e, sessionId: number) =>
+    listPickSessionItems(Number(sessionId))
+  )
+
+  ipcMain.handle('pick:pickLogo', async () => {
+    const picked = await dialog.showOpenDialog({
+      title: '选择水印 logo（建议透明 PNG）',
+      properties: ['openFile'],
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'svg'] }]
+    })
+    return picked.canceled ? null : picked.filePaths[0] ?? null
+  })
+
+  ipcMain.handle('pick:preview', (_e, sessionId: number, text: string) =>
+    previewPickReply(Number(sessionId), String(text ?? ''))
+  )
+
+  ipcMain.handle('pick:apply', (_e, sessionId: number, preview: PickReplyPreview) =>
+    applyPickReply(Number(sessionId), {
+      keep: Array.isArray(preview?.keep) ? preview.keep : [],
+      fix: Array.isArray(preview?.fix) ? preview.fix : [],
+      unmatched: Array.isArray(preview?.unmatched) ? preview.unmatched : [],
+      rejectRest: Boolean(preview?.rejectRest),
+      note: String(preview?.note ?? ''),
+      total: Number(preview?.total) || 0
+    })
+  )
+
+  ipcMain.handle('finals:defaults', () => getFinalsDefaults())
+
+  ipcMain.handle('finals:export', async (_e, input: FinalsExportInput) => {
+    const raw = input ?? ({} as FinalsExportInput)
+    const request: FinalsExportInput = {
+      itemIds: Array.isArray(raw.itemIds) ? raw.itemIds.map(Number) : [],
+      mode: raw.mode === 'copy' ? 'copy' : 'jpeg',
+      maxEdge: Number.isFinite(Number(raw.maxEdge)) ? Number(raw.maxEdge) : null,
+      quality: Number(raw.quality) || 90,
+      naming: raw.naming === 'prefix' ? 'prefix' : 'original',
+      prefix: String(raw.prefix ?? '').trim(),
+      watermark: String(raw.watermark ?? '').trim(),
+      watermarkStyle: normalizePickWatermark(raw.watermarkStyle)
+    }
+    if (request.itemIds.length === 0) throw new Error('没有选中照片')
+
+    const defaults = getFinalsDefaults()
+    const startDir =
+      defaults.lastDir && existsSync(defaults.lastDir)
+        ? defaults.lastDir
+        : app.getPath('pictures')
+    const picked = await dialog.showOpenDialog({
+      title: '选择导出文件夹',
+      defaultPath: startDir,
+      properties: ['openDirectory', 'createDirectory']
+    })
+    const dir = picked.canceled ? null : picked.filePaths[0]
+    if (!dir) return null
+
+    const win = activeWindow()
+    const result = await exportFinals(request, dir, (progress) => {
+      win?.webContents.send('finals:progress', progress)
+    })
+    saveFinalsDefaults({
+      lastDir: dir,
+      mode: request.mode,
+      maxEdge: request.maxEdge,
+      quality: request.quality,
+      naming: request.naming,
+      prefix: request.prefix,
+      watermark: request.watermark,
+      watermarkStyle: request.watermarkStyle
+    })
+    return result
+  })
 
   ipcMain.handle('import:pickImages', async () => {
     const result = await dialog.showOpenDialog({
@@ -467,6 +713,7 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('library:restore', async () => {
+    if (isImportRunning()) throw new Error('正在导入图片，等导入结束后再恢复图库')
     const picked = await dialog.showOpenDialog({
       title: '选择月相备份文件',
       properties: ['openFile'],
@@ -513,6 +760,7 @@ export function registerIpc(): void {
     invalidateClipCache()
     regroup()
     updateConfig({ library: dir })
+    touchLibrary(dir)
     restartWatcher()
 
     // 备份可能没打包缩略图，这里补齐，避免恢复后整页破图

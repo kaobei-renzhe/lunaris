@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { formatBytes, formatDate, folderName, scoreColor, thumbUrl } from './format'
+import {
+  formatBytes,
+  formatDate,
+  formatRelative,
+  folderName,
+  samePath,
+  scoreColor,
+  thumbUrl
+} from './format'
 
 describe('formatBytes', () => {
   it('0 与字节级不带小数', () => {
@@ -25,6 +33,26 @@ describe('thumbUrl', () => {
     expect(thumbUrl(12, 'mid')).toBe('thumb://item/12?q=mid')
     expect(thumbUrl(12, 'low')).toBe('thumb://item/12?q=low')
     expect(thumbUrl(12, 'high')).toBe('thumb://item/12?q=high')
+  })
+})
+
+describe('samePath', () => {
+  it('忽略大小写、斜杠方向和末尾分隔符', () => {
+    expect(samePath('E:\\Photos\\Shoot\\', 'e:/photos/shoot')).toBe(true)
+    expect(samePath('E:\\Photos\\A', 'E:\\Photos\\B')).toBe(false)
+  })
+})
+
+describe('formatRelative', () => {
+  it('未打开与刚刚', () => {
+    expect(formatRelative(0)).toBe('从未打开')
+    expect(formatRelative(Date.now() - 10_000)).toBe('刚刚')
+  })
+
+  it('按分钟/小时/天展示', () => {
+    expect(formatRelative(Date.now() - 5 * 60_000)).toBe('5 分钟前')
+    expect(formatRelative(Date.now() - 3 * 3600_000)).toBe('3 小时前')
+    expect(formatRelative(Date.now() - 4 * 86400_000)).toBe('4 天前')
   })
 })
 

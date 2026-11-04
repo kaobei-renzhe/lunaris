@@ -136,6 +136,10 @@ function migrate(db: Database.Database): void {
   ensureColumn(db, 'tags', 'facet_id', 'facet_id TEXT')
   // 标签的多级树：NULL 表示顶层标签
   ensureColumn(db, 'tags', 'parent_id', 'parent_id INTEGER')
+  // 参考片标记：1 = 收藏的参考作品（走研读流程），0 = 自己拍的（走复盘流程）
+  ensureColumn(db, 'items', 'reference', 'reference INTEGER NOT NULL DEFAULT 0')
+  // 上次写入/读取 XMP 侧车时记录的 mtime，用来发现外部软件改过
+  ensureColumn(db, 'items', 'xmp_mtime', 'xmp_mtime INTEGER NOT NULL DEFAULT 0')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS stacks (
@@ -188,7 +192,55 @@ function migrate(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_tags_facet ON tags(facet_id);
     CREATE INDEX IF NOT EXISTS idx_tags_parent ON tags(parent_id);
+
+    -- 照片研读笔记：圈选区域锚定 + 追问线程 + 研读/复盘双模式
+    -- region 存归一化坐标（0-1），换缩略图/大图/导出图都不用换算
+    CREATE TABLE IF NOT EXISTS photo_notes (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id    INTEGER NOT NULL,
+      parent_id  INTEGER,
+      kind       TEXT NOT NULL,
+      mode       TEXT NOT NULL DEFAULT 'study',
+      body       TEXT NOT NULL,
+      region     TEXT,
+      author     TEXT NOT NULL,
+      tags       TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_photo_notes_item ON photo_notes(item_id, id);
+    CREATE INDEX IF NOT EXISTS idx_photo_notes_parent ON photo_notes(parent_id);
+
+    -- 客户选片：一次导出 = 一个会话；序号 ↔ 照片的映射在导出时写入
+    CREATE TABLE IF NOT EXISTS pick_sessions (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      token        TEXT UNIQUE,
+      title        TEXT NOT NULL,
+      client       TEXT NOT NULL DEFAULT '',
+      photo_count  INTEGER NOT NULL DEFAULT 0,
+      watermark    TEXT NOT NULL DEFAULT '',
+      file_path    TEXT,
+      client_note  TEXT NOT NULL DEFAULT '',
+      reply_count  INTEGER NOT NULL DEFAULT 0,
+      created_at   INTEGER NOT NULL,
+      sent_at      INTEGER,
+      received_at  INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS pick_items (
+      session_id INTEGER NOT NULL,
+      seq        INTEGER NOT NULL,
+      item_id    INTEGER NOT NULL,
+      action     TEXT,
+      note       TEXT,
+      PRIMARY KEY (session_id, seq)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pick_items_item ON pick_items(item_id);
+    CREATE INDEX IF NOT EXISTS idx_pick_sessions_received ON pick_sessions(received_at);
   `)
+
+  // 选片会话导出的 HTML 路径：老会话没有记录，历史里只是不能打开文件夹
+  ensureColumn(db, 'pick_sessions', 'file_path', 'file_path TEXT')
+  ensureColumn(db, 'pick_sessions', 'client_note', "client_note TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'pick_sessions', 'reply_count', 'reply_count INTEGER NOT NULL DEFAULT 0')
 
   seedFacets(db)
   backfillDirs(db)

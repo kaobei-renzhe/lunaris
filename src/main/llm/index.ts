@@ -10,11 +10,13 @@ import { LlmError, isLlmError, type LlmMessage } from './types'
 import { qualityCapability } from './capabilities/quality'
 import { adviceCapability } from './capabilities/advice'
 import { smartFilterCapability } from './capabilities/smartFilter'
+import { socraticCapability } from './capabilities/socratic'
 
 // 能力在这里登记一次；新增能力只需实现接口 + 加一行
 registerCapability(qualityCapability)
 registerCapability(adviceCapability)
 registerCapability(smartFilterCapability)
+registerCapability(socraticCapability)
 
 async function readyState(capabilityId?: string): Promise<{ config: LlmConfig; key: string }> {
   const config = getLlmConfig()

@@ -44,6 +44,7 @@ interface ItemRow {
   stack_cover: number
   dir: string | null
   error: string | null
+  reference: number
 }
 
 export function thumbPathFor(id: number, quality: ThumbQuality = 'mid'): string {
@@ -184,7 +185,8 @@ function mapItems(rows: ItemRow[]): Item[] {
     error: r.error ?? null,
     tags: tagMap.get(r.id) ?? [],
     folderIds: folderMap.get(r.id) ?? [],
-    quality: qualityMap.get(r.id) ?? null
+    quality: qualityMap.get(r.id) ?? null,
+    reference: r.reference ?? 0
   }))
 }
 
@@ -308,6 +310,31 @@ function buildWhere(filter: FilterState, params: Array<string | number>): string
   if (filter.onlyIds && filter.onlyIds.length > 0) {
     where.push(`i.id IN (${filter.onlyIds.map(() => '?').join(',')})`)
     params.push(...filter.onlyIds)
+  }
+  if (filter.pickAction) {
+    // 客户的判断单独一张表，和主人自己的旗标互不干扰；
+    // 历史里点「看这一单」时用 pickSessionId 指定会话
+    const action =
+      filter.pickAction === 'keep'
+        ? "= 'keep'"
+        : filter.pickAction === 'fix'
+          ? "= 'fix'"
+          : "IN ('keep','fix')"
+    if (filter.pickSessionId) {
+      where.push(
+        `EXISTS (SELECT 1 FROM pick_items pi WHERE pi.item_id = i.id
+                 AND pi.session_id = ? AND pi.action ${action})`
+      )
+      params.push(filter.pickSessionId)
+    } else {
+      where.push(
+        `EXISTS (SELECT 1 FROM pick_items pi WHERE pi.item_id = i.id
+                 AND pi.session_id = (SELECT id FROM pick_sessions
+                                      WHERE received_at IS NOT NULL
+                                      ORDER BY received_at DESC, id DESC LIMIT 1)
+                 AND pi.action ${action})`
+      )
+    }
   }
   if (filter.colorFamily) {
     where.push('i.color_family = ?')
@@ -805,7 +832,20 @@ export function stats(): Stats {
   ).c
   const tags = (db.prepare('SELECT COUNT(*) AS c FROM tags').get() as { c: number }).c
   const folders = (db.prepare('SELECT COUNT(*) AS c FROM folders').get() as { c: number }).c
-  return { total: row.total, missing, bytes: row.bytes, tags, folders, errors }
+  // 「客户已选」入口用：最近一单里客户要的 + 要修的
+  const clientPicked = (
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT pi.item_id) AS c
+         FROM pick_items pi JOIN items i ON i.id = pi.item_id
+         WHERE pi.action IN ('keep','fix') AND i.trashed = 0
+           AND pi.session_id = (SELECT id FROM pick_sessions
+                                WHERE received_at IS NOT NULL
+                                ORDER BY received_at DESC, id DESC LIMIT 1)`
+      )
+      .get() as { c: number }
+  ).c
+  return { total: row.total, missing, bytes: row.bytes, tags, folders, errors, clientPicked }
 }
 
 interface DirBucket {

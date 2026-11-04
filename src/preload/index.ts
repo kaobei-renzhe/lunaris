@@ -10,7 +10,10 @@ import type {
   FilterState,
   ImportOptions,
   ImportProgress,
-  LibraryChange
+  LibraryChange,
+  FinalsExportProgress,
+  PickExportProgress,
+  XmpProgress
 } from '../shared/types'
 
 const api: Api = {
@@ -19,6 +22,21 @@ const api: Api = {
   openLibrary: (dir: string) => ipcRenderer.invoke('library:open', dir),
   lastLibrary: () => ipcRenderer.invoke('library:last'),
   getLibraryStorage: () => ipcRenderer.invoke('library:storage'),
+  listLibraries: () => ipcRenderer.invoke('libraries:list'),
+  renameLibrary: (id: string, name: string) => ipcRenderer.invoke('libraries:rename', id, name),
+  forgetLibrary: (id: string, alsoDeleteData: boolean) =>
+    ipcRenderer.invoke('libraries:forget', id, alsoDeleteData),
+  relocateLibrary: (id: string) => ipcRenderer.invoke('libraries:relocate', id),
+  getXmpSettings: () => ipcRenderer.invoke('xmp:settings:get'),
+  saveXmpSettings: (patch) => ipcRenderer.invoke('xmp:settings:save', patch),
+  xmpExportAll: () => ipcRenderer.invoke('xmp:exportAll'),
+  xmpCheckConflicts: () => ipcRenderer.invoke('xmp:check'),
+  xmpImportConflicts: (itemIds: number[]) => ipcRenderer.invoke('xmp:import', itemIds),
+  onXmpProgress: (cb) => {
+    const handler = (_e: unknown, payload: XmpProgress): void => cb(payload)
+    ipcRenderer.on('xmp:progress', handler)
+    return () => ipcRenderer.removeListener('xmp:progress', handler)
+  },
   pickIndexDir: () => ipcRenderer.invoke('library:index:pick'),
   moveIndexDir: (target) => ipcRenderer.invoke('library:index:move', target),
 
@@ -54,6 +72,16 @@ const api: Api = {
   setTag: (itemIds: number[], tagId: number, add: boolean) =>
     ipcRenderer.invoke('tags:set', itemIds, tagId, add),
 
+  notes: {
+    list: (itemId: number) => ipcRenderer.invoke('notes:list', itemId),
+    count: (itemId: number) => ipcRenderer.invoke('notes:count', itemId),
+    create: (input) => ipcRenderer.invoke('notes:create', input),
+    update: (id: number, patch) => ipcRenderer.invoke('notes:update', id, patch),
+    remove: (id: number) => ipcRenderer.invoke('notes:delete', id),
+    setReference: (itemId: number, value: boolean) =>
+      ipcRenderer.invoke('notes:setReference', itemId, value)
+  },
+
   listFolders: () => ipcRenderer.invoke('folders:list'),
   createFolder: (name: string) => ipcRenderer.invoke('folders:create', name),
   deleteFolder: (id: number) => ipcRenderer.invoke('folders:delete', id),
@@ -65,6 +93,18 @@ const api: Api = {
   listSmart: () => ipcRenderer.invoke('smart:list'),
   saveSmart: (name: string, filter: FilterState) => ipcRenderer.invoke('smart:save', name, filter),
   deleteSmart: (id: number) => ipcRenderer.invoke('smart:delete', id),
+
+  pickDefaults: () => ipcRenderer.invoke('pick:defaults'),
+  pickExport: (input) => ipcRenderer.invoke('pick:export', input),
+  listPickSessions: () => ipcRenderer.invoke('pick:sessions'),
+  deletePickSession: (sessionId) => ipcRenderer.invoke('pick:deleteSession', sessionId),
+  listPickSessionItems: (sessionId) => ipcRenderer.invoke('pick:sessionItems', sessionId),
+  pickPickLogo: () => ipcRenderer.invoke('pick:pickLogo'),
+  pickReplyPreview: (sessionId, text) => ipcRenderer.invoke('pick:preview', sessionId, text),
+  pickApplyReply: (sessionId, preview) => ipcRenderer.invoke('pick:apply', sessionId, preview),
+
+  finalsDefaults: () => ipcRenderer.invoke('finals:defaults'),
+  finalsExport: (input) => ipcRenderer.invoke('finals:export', input),
 
   pickImages: () => ipcRenderer.invoke('import:pickImages'),
   pickFolder: () => ipcRenderer.invoke('import:pickFolder'),
@@ -194,6 +234,16 @@ const api: Api = {
     const handler = (_e: unknown, payload: AutoTagProgress): void => cb(payload)
     ipcRenderer.on('clip:autotag-progress', handler)
     return () => ipcRenderer.removeListener('clip:autotag-progress', handler)
+  },
+  onPickProgress: (cb) => {
+    const handler = (_e: unknown, payload: PickExportProgress): void => cb(payload)
+    ipcRenderer.on('pick:export-progress', handler)
+    return () => ipcRenderer.removeListener('pick:export-progress', handler)
+  },
+  onFinalsProgress: (cb) => {
+    const handler = (_e: unknown, payload: FinalsExportProgress): void => cb(payload)
+    ipcRenderer.on('finals:progress', handler)
+    return () => ipcRenderer.removeListener('finals:progress', handler)
   }
 }
 

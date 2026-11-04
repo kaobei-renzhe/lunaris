@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   Check,
   Cpu,
+  FileText,
   HardDrive,
   Image as ImageIcon,
   Monitor,
@@ -12,7 +13,14 @@ import {
   Sun,
   X
 } from 'lucide-react'
-import type { EmbeddingModelId, EmbeddingModelInfo, LibraryStorage, ThemeMode } from '@shared/types'
+import type {
+  EmbeddingModelId,
+  EmbeddingModelInfo,
+  LibraryStorage,
+  ThemeMode,
+  XmpProgress,
+  XmpSettings
+} from '@shared/types'
 import type { LlmConfig, LlmStatus, LlmTestResult } from '@shared/llm'
 import { findSkin, SKINS, type SkinId } from '@shared/skins'
 import {
@@ -92,6 +100,10 @@ export default function SettingsDialog({
   const [thumbMsg, setThumbMsg] = useState<string | null>(null)
   const [thumbLimit, setThumbLimit] = useState<number | null>(null)
   const [limitBusy, setLimitBusy] = useState(false)
+  const [xmp, setXmp] = useState<XmpSettings | null>(null)
+  const [xmpBusy, setXmpBusy] = useState(false)
+  const [xmpMsg, setXmpMsg] = useState<string | null>(null)
+  const [xmpProgress, setXmpProgress] = useState<XmpProgress | null>(null)
 
   useEffect(() => {
     void window.api
@@ -126,7 +138,13 @@ export default function SettingsDialog({
       .getThumbCacheLimit()
       .then(setThumbLimit)
       .catch(() => setThumbLimit(THUMB_CACHE_LIMIT_DEFAULT))
+    void window.api
+      .getXmpSettings()
+      .then(setXmp)
+      .catch(() => setXmp({ enabled: false, ignoreExternal: false }))
   }, [])
+
+  useEffect(() => window.api.onXmpProgress(setXmpProgress), [])
 
   const limitLabel = (mb: number): string =>
     THUMB_CACHE_LIMIT_OPTIONS.find((option) => option.value === mb)?.label ?? `${mb} MB`
@@ -164,6 +182,86 @@ export default function SettingsDialog({
       setThumbMsg('设置上限失败，稍后再试')
     } finally {
       setLimitBusy(false)
+    }
+  }
+
+  /** 存 XMP 开关；关闭只影响后续自动写入，不删已有侧车 */
+  const changeXmp = async (patch: Partial<XmpSettings>): Promise<void> => {
+    if (!xmp) return
+    try {
+      const next = await window.api.saveXmpSettings(patch)
+      setXmp(next)
+      setXmpMsg(
+        patch.enabled === false
+          ? '已关闭 XMP 侧车，已有 .xmp 文件不会删除'
+          : patch.enabled === true
+            ? '已开启 XMP 侧车，之后改星级/旗标/标签会自动写入'
+            : '设置已保存'
+      )
+    } catch {
+      setXmpMsg('保存 XMP 设置失败')
+    }
+  }
+
+  const exportAllXmp = async (): Promise<void> => {
+    if (xmpBusy) return
+    const ok = await window.api.confirm(
+      '为所有照片写 XMP 侧车？',
+      '会在原图旁边生成 .xmp 文件，不改原图；RAW + JPEG 配对只写 RAW。图库很大时需要等一会儿。'
+    )
+    if (!ok) return
+    setXmpBusy(true)
+    setXmpMsg(null)
+    setXmpProgress(null)
+    try {
+      const result = await window.api.xmpExportAll()
+      setXmpMsg(
+        `已写 ${result.written} 张${result.skipped ? ` · 跳过 ${result.skipped} 张` : ''}${
+          result.failed ? ` · 失败 ${result.failed} 张（多为只读盘）` : ''
+        }`
+      )
+    } catch (error) {
+      setXmpMsg(`导出 XMP 失败：${(error as Error).message}`)
+    } finally {
+      setXmpBusy(false)
+      setXmpProgress(null)
+    }
+  }
+
+  const checkXmp = async (): Promise<void> => {
+    if (xmpBusy) return
+    setXmpBusy(true)
+    setXmpMsg(null)
+    setXmpProgress(null)
+    try {
+      const result = await window.api.xmpCheckConflicts()
+      if (result.ignored) {
+        setXmpMsg('已设置忽略外部修改，不再检查')
+        return
+      }
+      if (result.conflicts.length === 0) {
+        setXmpMsg(`检查了 ${result.scanned} 张，没有发现外部修改`)
+        return
+      }
+      const ok = await window.api.confirm(
+        `发现 ${result.conflicts.length} 张在别的软件里改过，要导入吗？`,
+        '会覆盖星级、旗标、备注，标签只增不减；不导入就保持月相现在的判断。'
+      )
+      if (!ok) {
+        setXmpMsg(`发现 ${result.conflicts.length} 张外部修改，已跳过`)
+        return
+      }
+      const imported = await window.api.xmpImportConflicts(
+        result.conflicts.map((item) => item.itemId)
+      )
+      setXmpMsg(
+        `已导入 ${imported.imported} 张${imported.failed ? ` · ${imported.failed} 张失败` : ''}`
+      )
+    } catch (error) {
+      setXmpMsg(`检查外部修改失败：${(error as Error).message}`)
+    } finally {
+      setXmpBusy(false)
+      setXmpProgress(null)
     }
   }
 
@@ -1026,6 +1124,129 @@ export default function SettingsDialog({
                         </div>
                         {thumbMsg && (
                           <div className="text-[10.5px] leading-4 text-[var(--accent-text)]">{thumbMsg}</div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-1">
+                  <div className="mb-2 flex items-center gap-1.5 text-[12.5px]">
+                    <FileText size={13} /> XMP 侧车
+                  </div>
+                  <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--panel-2)] px-3 py-2.5">
+                    {!xmp ? (
+                      <div className="text-[11px] text-[var(--faint)]">读取中…</div>
+                    ) : (
+                      <>
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[12px]">启用 XMP 侧车</div>
+                            <div className="mt-0.5 text-[10.5px] leading-4 text-[var(--faint)]">
+                              把星级、旗标、标签、短备注写到原图旁边的 .xmp；只写人的判断，不写 AI
+                              评分。默认关闭。
+                            </div>
+                          </div>
+                          <button
+                            className={`relative ml-auto mt-0.5 h-[21px] w-[38px] shrink-0 rounded-full transition-colors ${
+                              xmp.enabled ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'
+                            }`}
+                            onClick={() => void changeXmp({ enabled: !xmp.enabled })}
+                            aria-pressed={xmp.enabled}
+                            title={xmp.enabled ? '关闭 XMP 侧车' : '开启 XMP 侧车'}
+                          >
+                            <span
+                              className={`absolute top-[2px] h-[17px] w-[17px] rounded-full bg-white transition-all ${
+                                xmp.enabled ? 'left-[19px]' : 'left-[2px]'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex items-start gap-2 border-t border-[var(--border)] pt-2">
+                          <div className="min-w-0">
+                            <div className="text-[12px]">忽略外部修改</div>
+                            <div className="mt-0.5 text-[10.5px] leading-4 text-[var(--faint)]">
+                              Lightroom 等软件改过侧车时不再提示导入，月相保持自己的判断。
+                            </div>
+                          </div>
+                          <button
+                            className={`relative ml-auto mt-0.5 h-[21px] w-[38px] shrink-0 rounded-full transition-colors ${
+                              xmp.ignoreExternal
+                                ? 'bg-[var(--accent)]'
+                                : 'bg-[var(--border-strong)]'
+                            } ${xmp.enabled ? '' : 'opacity-40'}`}
+                            onClick={() =>
+                              void changeXmp({ ignoreExternal: !xmp.ignoreExternal })
+                            }
+                            aria-pressed={xmp.ignoreExternal}
+                            disabled={!xmp.enabled}
+                            title={xmp.ignoreExternal ? '恢复外部修改提示' : '忽略外部修改'}
+                          >
+                            <span
+                              className={`absolute top-[2px] h-[17px] w-[17px] rounded-full bg-white transition-all ${
+                                xmp.ignoreExternal ? 'left-[19px]' : 'left-[2px]'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--border)] pt-2">
+                          <button
+                            className="btn h-7 px-2 text-[11.5px]"
+                            disabled={xmpBusy}
+                            onClick={() => void exportAllXmp()}
+                            title="为所有照片生成 .xmp，用于迁移到 Lightroom 等软件"
+                          >
+                            导出全部 XMP
+                          </button>
+                          <button
+                            className="btn btn-ghost h-7 px-2 text-[11.5px]"
+                            disabled={xmpBusy || !xmp.enabled}
+                            onClick={() => void checkXmp()}
+                            title="对比侧车 mtime，导入外部软件的修改"
+                          >
+                            检查外部修改
+                          </button>
+                          <span className="text-[10px] text-[var(--faint)]">
+                            开启后导入新照片会读取同名 XMP
+                          </span>
+                        </div>
+
+                        {xmpProgress && (
+                          <div>
+                            <div className="flex items-center justify-between text-[10.5px] text-[var(--faint)]">
+                              <span>
+                                {xmpProgress.phase === 'write'
+                                  ? '正在写 XMP'
+                                  : '正在检查外部修改'}
+                              </span>
+                              <span className="tabular-nums">
+                                {xmpProgress.done}/{xmpProgress.total}
+                              </span>
+                            </div>
+                            <div className="mt-1 h-[4px] overflow-hidden rounded-full bg-[var(--panel-3)]">
+                              <div
+                                className="h-full bg-[var(--accent)] transition-[width] duration-200"
+                                style={{
+                                  width: `${
+                                    xmpProgress.total
+                                      ? Math.round((xmpProgress.done / xmpProgress.total) * 100)
+                                      : 0
+                                  }%`
+                                }}
+                              />
+                            </div>
+                            <div className="mt-1 truncate text-[10px] text-[var(--faint)]">
+                              {xmpProgress.current}
+                            </div>
+                          </div>
+                        )}
+
+                        {xmpMsg && (
+                          <div className="text-[10.5px] leading-4 text-[var(--accent-text)]">
+                            {xmpMsg}
+                          </div>
                         )}
                       </>
                     )}

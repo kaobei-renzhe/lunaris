@@ -15,6 +15,8 @@ import type {
   ImportResult,
   Item,
   PendingImport,
+  PickApplyResult,
+  PickExportResult,
   SmartFolder,
   Stats,
   Tag
@@ -36,16 +38,29 @@ import EquipmentDialog from './components/EquipmentDialog'
 import SettingsDialog, { type SettingsTab } from './components/SettingsDialog'
 import AdviceDialog from './components/AdviceDialog'
 import SmartFilterDialog from './components/SmartFilterDialog'
+import PickExportDialog from './components/PickExportDialog'
+import FinalsExportDialog from './components/FinalsExportDialog'
+import PickImportDialog from './components/PickImportDialog'
+import PickHistoryDialog from './components/PickHistoryDialog'
 import ImportDialog from './components/ImportDialog'
 import ImportStatusCard from './components/ImportStatusCard'
 import ResumeImportCard from './components/ResumeImportCard'
 import Welcome from './components/Welcome'
-import { formatBytes, folderName } from './lib/format'
+import LibrarySwitcher from './components/LibrarySwitcher'
+import { formatBytes, folderName, samePath } from './lib/format'
 import { useLayoutSizes } from './hooks/useLayoutSizes'
 import { useAppearance } from './hooks/useAppearance'
 import { useLightbox } from './hooks/useLightbox'
 
-const EMPTY_STATS: Stats = { total: 0, missing: 0, tags: 0, folders: 0, bytes: 0, errors: 0 }
+const EMPTY_STATS: Stats = {
+  total: 0,
+  missing: 0,
+  tags: 0,
+  folders: 0,
+  bytes: 0,
+  errors: 0,
+  clientPicked: 0
+}
 const PAGE = 200
 
 interface Toast {
@@ -55,8 +70,9 @@ interface Toast {
 
 export default function App() {
   const [library, setLibrary] = useState<string | null>(null)
-  /** 从图库切到欢迎页时记住原图库，方便一键返回 */
-  const [switchingFrom, setSwitchingFrom] = useState<string | null>(null)
+  /** 图库显示名（启动页可重命名） */
+  const [libraryName, setLibraryName] = useState('')
+  const [switcherOpen, setSwitcherOpen] = useState(false)
   const [booting, setBooting] = useState(true)
   const [items, setItems] = useState<Item[]>([])
   const [total, setTotal] = useState(0)
@@ -97,6 +113,12 @@ export default function App() {
   /** 每个能力自己的开关，关掉后对应入口直接隐藏 */
   const [aiCaps, setAiCaps] = useState<Record<string, boolean>>({})
   const [smartFilterOpen, setSmartFilterOpen] = useState(false)
+  const [pickExportOpen, setPickExportOpen] = useState(false)
+  const [finalsExportOpen, setFinalsExportOpen] = useState(false)
+  const [pickImportOpen, setPickImportOpen] = useState(false)
+  const [pickHistoryOpen, setPickHistoryOpen] = useState(false)
+  /** 从选片记录进入导入时，预选那一单 */
+  const [pickImportSessionId, setPickImportSessionId] = useState<number | null>(null)
   /** AI 筛选用的规则文案，仅用于工具栏 chip 展示；筛选条件本身在 filter.onlyIds 里 */
   const [aiRule, setAiRule] = useState<string | null>(null)
   const [lastRelocateDir, setLastRelocateDir] = useState<string | null>(null)
@@ -222,6 +244,29 @@ export default function App() {
       .catch(() => undefined)
       .finally(() => setBooting(false))
   }, [])
+
+  // 侧栏显示库名：优先用启动页里改过的名字
+  useEffect(() => {
+    if (!library) {
+      setLibraryName('')
+      return
+    }
+    let cancelled = false
+    void window.api
+      .listLibraries()
+      .then((list) => {
+        if (cancelled) return
+        setLibraryName(
+          list.find((item) => samePath(item.path, library))?.name ?? folderName(library)
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setLibraryName(folderName(library))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [library])
 
   const { theme, changeTheme, skin, changeSkin, thumbQuality, changeThumbQuality } = useAppearance()
 
@@ -1036,6 +1081,20 @@ export default function App() {
 
   const activeItem = items.find((i) => i.id === activeId) ?? null
   const lightboxIndex = items.findIndex((i) => i.id === lightboxId)
+
+  /** 选片页按相册里的顺序编号，而不是按用户点选的先后 */
+  const pickItemIds = useMemo(
+    () => items.filter((item) => selectedIds.includes(item.id)).map((item) => item.id),
+    [items, selectedIds]
+  )
+  const pickTitle = useMemo(() => {
+    const d = new Date()
+    const pad = (n: number): string => String(n).padStart(2, '0')
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const first = items.find((item) => selectedIds.includes(item.id))
+    const dir = filter.dir ?? (first ? first.path.replace(/[\\/][^\\/]+$/, '') : '')
+    return `${dir ? folderName(dir) : '选片'} · ${stamp}`
+  }, [items, selectedIds, filter.dir])
   // 条件/排序/模式变化时让瀑布流回到顶部
   const listResetKey = [
     filter.sort ?? '',
@@ -1054,6 +1113,20 @@ export default function App() {
     similar ? `sim${similar.id}` : ''
   ].join('|')
 
+  /** 热切换图库：主进程已经换好库，这里只重置视图状态 */
+  const switchLibrary = (dir: string): void => {
+    setSwitcherOpen(false)
+    setLibrary(dir)
+    setFilter({ sort: 'added' })
+    setSelectedIds([])
+    setActiveId(null)
+    setExpandedGroups([])
+    setSemanticMode(false)
+    setSimilar(null)
+    closeLightbox()
+    bump()
+  }
+
   if (booting) {
     return (
       <div className="h-full grid place-items-center text-[var(--faint)] text-[13px]">正在唤醒月相…</div>
@@ -1063,20 +1136,8 @@ export default function App() {
   if (!library) {
     return (
       <Welcome
-        onBack={
-          switchingFrom
-            ? () => {
-                const back = switchingFrom
-                setSwitchingFrom(null)
-                setLibrary(back)
-                setTick((value) => value + 1)
-              }
-            : undefined
-        }
-        backLabel={switchingFrom ? folderName(switchingFrom) : undefined}
         notice={indexMissing}
         onReady={(dir) => {
-          setSwitchingFrom(null)
           setIndexMissing(null)
           setLibrary(dir)
           setFilter({ sort: 'added' })
@@ -1090,7 +1151,13 @@ export default function App() {
   }
 
   if (portraitOpen) {
-    return <PortraitWorkspace onBack={() => setPortraitOpen(false)} />
+    return (
+      <PortraitWorkspace
+        onBack={() => setPortraitOpen(false)}
+        aiReady={aiReady}
+        canAsk={aiCaps['photo.socratic'] !== false}
+      />
+    )
   }
 
   return (
@@ -1098,6 +1165,7 @@ export default function App() {
       <div className="flex-1 flex min-h-0">
         <Sidebar
           library={library}
+          libraryName={libraryName || folderName(library)}
           stats={stats}
           tags={tags}
           facets={facets}
@@ -1116,10 +1184,7 @@ export default function App() {
           onSync={() => void syncLibrary()}
           onRescan={rescan}
           onDuplicates={() => setDuplicatesOpen(true)}
-          onSwitch={() => {
-            setSwitchingFrom(library)
-            setLibrary(null)
-          }}
+          onSwitch={() => setSwitcherOpen(true)}
           onBackup={backupLibrary}
           onRestore={restoreLibrary}
           onExport={exportCsv}
@@ -1128,6 +1193,7 @@ export default function App() {
           onIndexClip={() => void ensureClipIndex()}
           onAutoTag={() => setAutoTagOpen(true)}
           onRelocate={() => setRelocateOpen(true)}
+          onPickHistory={() => setPickHistoryOpen(true)}
           lastRelocateDir={lastRelocateDir}
           onEquipment={() => setEquipmentOpen(true)}
           onSettings={() => openSettings('appearance')}
@@ -1202,6 +1268,12 @@ export default function App() {
             onClearMissing={clearMissing}
             onClearSelection={() => setSelectedIds([])}
             onSaveSmart={saveSmart}
+            onExportPick={() => setPickExportOpen(true)}
+            onExportFinals={() => setFinalsExportOpen(true)}
+            onImportPick={() => {
+              setPickImportSessionId(null)
+              setPickImportOpen(true)
+            }}
           />
           {similar && (
             <div className="shrink-0 px-4 py-2 border-b border-[var(--border)] bg-[var(--panel-2)] flex items-center gap-3 text-[12px]">
@@ -1241,6 +1313,7 @@ export default function App() {
               Boolean(filter.orientation) ||
               Boolean(filter.flag) ||
               Boolean(filter.missing) ||
+              Boolean(filter.pickAction) ||
               (filter.minRating ?? 0) > 0
             }
           />
@@ -1275,6 +1348,7 @@ export default function App() {
             aiReady={aiReady}
             canScore={aiCaps['photo.quality'] !== false}
             canAdvice={aiCaps['photo.advice'] !== false}
+            canStudy={aiCaps['photo.socratic'] !== false}
           />
         )}
       </div>
@@ -1424,6 +1498,12 @@ export default function App() {
             const item = items[next]
             if (item) openLightbox(item.id)
           }}
+          tags={tags}
+          folders={folders}
+          onRefresh={bump}
+          onPushUndo={pushUndo}
+          aiReady={aiReady}
+          canAsk={aiCaps['photo.socratic'] !== false}
         />
       )}
 
@@ -1501,7 +1581,11 @@ export default function App() {
           onSkin={changeSkin}
           thumbQuality={thumbQuality}
           onThumbQuality={changeThumbQuality}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false)
+            // XMP 导入可能改了星级/标签，关掉设置后刷新一次
+            bump()
+          }}
           initialTab={settingsTab}
         />
       )}
@@ -1521,6 +1605,82 @@ export default function App() {
           onApply={applyAiFilter}
           onClose={() => setSmartFilterOpen(false)}
           onOpenSettings={() => openSettings('llm')}
+        />
+      )}
+
+      {pickExportOpen && (
+        <PickExportDialog
+          itemIds={pickItemIds}
+          defaultTitle={pickTitle}
+          onClose={() => setPickExportOpen(false)}
+          onExported={(result: PickExportResult) => {
+            notify(
+              `已生成选片页 · ${result.count} 张 · ${formatBytes(result.bytes)}${
+                result.failed.length ? `（${result.failed.length} 张读取失败已跳过）` : ''
+              }`
+            )
+          }}
+        />
+      )}
+
+      {finalsExportOpen && (
+        <FinalsExportDialog
+          itemIds={pickItemIds}
+          onClose={() => setFinalsExportOpen(false)}
+          onExported={(result) => {
+            notify(
+              `已导出 ${result.count} 张到 ${folderName(result.dir)}${
+                result.failed.length ? `（${result.failed.length} 张失败）` : ''
+              }`
+            )
+          }}
+        />
+      )}
+
+      {pickImportOpen && (
+        <PickImportDialog
+          initialSessionId={pickImportSessionId}
+          onClose={() => setPickImportOpen(false)}
+          onApplied={(result: PickApplyResult, sessionId: number) => {
+            setPickImportOpen(false)
+            setPickImportSessionId(null)
+            setFilter({ ...filter, pickAction: 'any', pickSessionId: sessionId })
+            notify(
+              `客户已选 ${result.keep + result.fix} 张（要修 ${result.fix} 张）${
+                result.unmatched.length ? ` · ${result.unmatched.length} 个编号对不上` : ''
+              }${result.replyCount > 1 ? ` · 第 ${result.replyCount} 次回传` : ''}`
+            )
+            bump()
+          }}
+        />
+      )}
+
+      {pickHistoryOpen && (
+        <PickHistoryDialog
+          onClose={() => setPickHistoryOpen(false)}
+          onOpenImport={(sessionId) => {
+            setPickHistoryOpen(false)
+            setPickImportSessionId(sessionId)
+            setPickImportOpen(true)
+          }}
+          onViewSession={(sessionId) => {
+            setPickHistoryOpen(false)
+            setFilter({ ...filter, pickAction: 'any', pickSessionId: sessionId })
+          }}
+          onDeleted={(sessionId) => {
+            // 正在看这一单时把它删了，筛选条件也一起收回，避免列表空着
+            if (filter.pickSessionId === sessionId) {
+              setFilter({ ...filter, pickAction: undefined, pickSessionId: undefined })
+            }
+            bump()
+          }}
+        />
+      )}
+      {switcherOpen && (
+        <LibrarySwitcher
+          current={library}
+          onClose={() => setSwitcherOpen(false)}
+          onSwitched={switchLibrary}
         />
       )}
     </div>
